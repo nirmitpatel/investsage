@@ -7,7 +7,7 @@ import asyncio
 import logging
 import time
 import yfinance as yf
-from typing import List, Dict, Any
+from typing import List, Dict, Any, Optional
 
 logging.getLogger("yfinance").setLevel(logging.CRITICAL)
 
