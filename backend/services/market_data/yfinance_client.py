@@ -65,6 +65,7 @@ FUND_SECTOR_NAME_MAP = {
     "industrials": "Industrials",
     "basic_materials": "Basic Materials",
     "real_estate": "Real Estate",
+    "realestate": "Real Estate",
     "communication_services": "Communication Services",
     "energy": "Energy",
     "utilities": "Utilities",

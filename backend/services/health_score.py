@@ -8,22 +8,20 @@ Scores 0-100 based on:
   - Overall performance (10 pts)
 """
 
-from typing import List, Dict, Any, Optional
+from typing import List, Dict, Any, Optional, Tuple
 from collections import defaultdict
 
 InvestmentStyle = Optional[str]  # 'play_it_safe' | 'beat_the_market' | 'long_game'
 
-# Sectors considered high-volatility
 HIGH_VOLATILITY_SECTORS = {"Technology", "Energy", "Consumer Cyclical", "Communication Services"}
 
-# Defensive diversification suggestion appended to position concentration messages
 STYLE_REBALANCE_TIP = {
-    "play_it_safe": "Consider gradually rebalancing into diversified bond funds or defensive sectors like Healthcare, Utilities, or Consumer Defensive.",
+    "play_it_safe": "Consider rebalancing into diversified bond funds or defensive sectors like Healthcare, Utilities, or Consumer Defensive.",
     "beat_the_market": "Consider rebalancing into high-conviction positions across multiple growth sectors.",
     "long_game": "Consider spreading across 10–20 positions for steady long-term compounding.",
+    None: "Consider rebalancing to reduce concentration risk.",
 }
 
-# Market trend period per style
 STYLE_TREND_PERIOD = {
     "play_it_safe": ("1y", "1-year"),
     "beat_the_market": ("3mo", "3-month"),
@@ -34,10 +32,14 @@ STYLE_TREND_PERIOD = {
 def build_effective_sector_values(
     positions: List[Dict[str, Any]],
     fund_weightings: Optional[Dict[str, Dict[str, float]]] = None,
+    unknown_as_other: bool = False,
 ) -> Dict[str, float]:
     """
-    Build a sector → dollar_value map that expands ETF/mutual fund positions
-    into their underlying sector weightings.
+    Build a sector → dollar_value map, expanding ETF/fund positions into
+    their underlying sectors where data is available.
+
+    If unknown_as_other=True, funds without breakdown data are grouped under
+    "Other" so the total sums to 100% of portfolio value.
     """
     sector_values: Dict[str, float] = defaultdict(float)
     fund_weightings = fund_weightings or {}
@@ -51,7 +53,8 @@ def build_effective_sector_values(
             if sym in fund_weightings:
                 for sec_name, weight in fund_weightings[sym].items():
                     sector_values[sec_name] += val * weight
-            # No weightings → skip (excluded from sector analysis)
+            elif unknown_as_other:
+                sector_values["Other"] += val
         else:
             sector_values[sector] += val
 
@@ -64,7 +67,9 @@ def calculate_health_score(
     investment_style: InvestmentStyle = None,
     market_trends: Optional[Dict[str, float]] = None,
 ) -> Dict[str, Any]:
-    trend_period_code, trend_period_label = STYLE_TREND_PERIOD.get(investment_style, ("3mo", "3-month"))
+    trend_period_code, trend_period_label = STYLE_TREND_PERIOD.get(
+        investment_style, ("3mo", "3-month")
+    )
 
     if not positions:
         return {
@@ -83,35 +88,45 @@ def calculate_health_score(
     total_value = sum(p.get("current_value") or 0 for p in positions)
     total_gain_loss = sum(p.get("total_gain_loss") or 0 for p in positions)
     issues: List[Dict[str, Any]] = []
-    notes: List[str] = []   # Informational, no score impact
+    notes: List[str] = []
     deductions = 0
 
     is_safe = investment_style == "play_it_safe"
     is_long = investment_style == "long_game"
+    rebalance_tip = STYLE_REBALANCE_TIP.get(investment_style, STYLE_REBALANCE_TIP[None])
 
-    # Concentration thresholds by style
+    # Concentration thresholds
     sector_high_pct = 40 if is_safe else 50
     sector_med_pct = 28 if is_safe else 35
     pos_high_pct = 15 if is_safe else 20
     pos_med_pct = 8 if is_safe else 12
-    rebalance_tip = STYLE_REBALANCE_TIP.get(investment_style, STYLE_REBALANCE_TIP["beat_the_market"])
 
-    # ── Fund composition notes (informational only) ───────────────────
     fund_weightings = fund_weightings or {}
+
+    # Identify funds with no sector breakdown
     unknown_funds = [
-        p["symbol"] for p in positions
+        p for p in positions
         if p.get("sector") in ("ETF", "Mutual Fund") and p.get("symbol") not in fund_weightings
     ]
+    unknown_fund_syms = [p["symbol"] for p in unknown_funds]
+    unknown_fund_value = sum(p.get("current_value") or 0 for p in unknown_funds)
+
     if unknown_funds:
+        unknown_pct = (unknown_fund_value / total_value * 100) if total_value > 0 else 0
         notes.append(
-            f"Sector data unavailable for {', '.join(unknown_funds)} — these holdings are excluded from sector concentration analysis."
+            f"Sector composition data isn't available for {', '.join(unknown_fund_syms)} "
+            f"({unknown_pct:.0f}% of portfolio). These are likely broadly diversified funds — "
+            f"check their fund page (e.g. on Morningstar) to see their underlying holdings."
         )
 
-    sector_values = build_effective_sector_values(positions, fund_weightings)
+    # Sector values for concentration analysis (unknown funds excluded)
+    sector_values_analysis = build_effective_sector_values(positions, fund_weightings, unknown_as_other=False)
+    # Sector values for display (unknown funds shown as "Other" to fill the donut to 100%)
+    sector_values_display = build_effective_sector_values(positions, fund_weightings, unknown_as_other=True)
 
     # ── Sector concentration ──────────────────────────────────────────
     if total_value > 0:
-        for sector, val in sector_values.items():
+        for sector, val in sector_values_analysis.items():
             pct = (val / total_value) * 100
             if pct > sector_high_pct:
                 deductions += 25
@@ -123,31 +138,37 @@ def calculate_health_score(
             elif pct > sector_med_pct:
                 deductions += 12
                 if is_safe:
-                    msg = f"{sector} makes up {pct:.0f}% of your portfolio. A play-it-safe strategy benefits from spreading exposure across 5+ sectors. {rebalance_tip}"
+                    msg = f"{sector} makes up {pct:.0f}% of your portfolio. A play-it-safe strategy benefits from broader diversification. {rebalance_tip}"
                 else:
                     msg = f"{sector} makes up {pct:.0f}% of your portfolio. Consider spreading across more sectors to reduce concentration risk."
                 issues.append({"type": "sector_concentration", "severity": "medium", "message": msg})
 
-    # ── Play-it-safe: high-volatility sector exposure warning ─────────
+    # ── Play-it-safe: high-volatility sector warning ──────────────────
     if is_safe and total_value > 0:
-        hv_val = sum(v for s, v in sector_values.items() if s in HIGH_VOLATILITY_SECTORS)
+        hv_val = sum(v for s, v in sector_values_analysis.items() if s in HIGH_VOLATILITY_SECTORS)
         hv_pct = (hv_val / total_value) * 100
         if hv_pct > 50:
             deductions += 8
-            hv_names = ", ".join(s for s in HIGH_VOLATILITY_SECTORS if s in sector_values)
+            hv_names = ", ".join(s for s in HIGH_VOLATILITY_SECTORS if s in sector_values_analysis)
             issues.append({
                 "type": "high_volatility_exposure",
                 "severity": "medium",
-                "message": f"{hv_pct:.0f}% of your portfolio is in high-volatility sectors ({hv_names}). For a play-it-safe approach, consider adding defensive holdings in Utilities, Healthcare, or Consumer Defensive.",
+                "message": f"{hv_pct:.0f}% of your portfolio (excluding unknown funds) is in high-volatility sectors ({hv_names}). For a play-it-safe approach, consider adding defensive holdings in Utilities, Healthcare, or Consumer Defensive.",
             })
 
     # ── Individual position sizing ────────────────────────────────────
+    # Skip funds without sector data — they're internally diversified
     for p in positions:
+        sym = p["symbol"]
+        sector = p.get("sector") or "Unknown"
+
+        # Funds without breakdown are internally diversified — skip concentration check
+        if sector in ("ETF", "Mutual Fund") and sym in unknown_fund_syms:
+            continue
+
         val = p.get("current_value") or 0
         if total_value > 0:
             pct = (val / total_value) * 100
-            sector = p.get("sector") or "Unknown"
-            sym = p["symbol"]
             if pct > pos_high_pct:
                 deductions += 15
                 msg = (
@@ -160,7 +181,7 @@ def calculate_health_score(
                 deductions += 7
                 msg = (
                     f"{sym} ({sector}) is {pct:.0f}% of your portfolio. "
-                    f"Consider trimming to under {pos_med_pct}% to stay within your {'safety target' if is_safe else 'diversification target'}. "
+                    f"Consider trimming to under {pos_med_pct}% — this keeps any single position from having outsized impact. "
                     f"{rebalance_tip}"
                 )
                 issues.append({"type": "position_concentration", "severity": "medium", "message": msg})
@@ -205,10 +226,10 @@ def calculate_health_score(
     else:
         grade = "F"
 
-    # ── Sector breakdown ──────────────────────────────────────────────
+    # ── Sector breakdown for display (includes "Other" for unknown funds) ─
     sector_breakdown = []
-    if total_value > 0 and sector_values:
-        for sector, val in sorted(sector_values.items(), key=lambda x: -x[1]):
+    if total_value > 0 and sector_values_display:
+        for sector, val in sorted(sector_values_display.items(), key=lambda x: (-x[1], x[0])):
             pct = round((val / total_value) * 100, 1)
             item: Dict[str, Any] = {"sector": sector, "value": round(val, 2), "pct": pct}
             if market_trends and sector in market_trends:
