@@ -32,9 +32,12 @@ def build_effective_sector_values(
         sector = p.get("sector") or "Unknown"
         sym = p.get("symbol", "")
 
-        if sector in ("ETF", "Mutual Fund") and sym in fund_weightings:
-            for sec_name, weight in fund_weightings[sym].items():
-                sector_values[sec_name] += val * weight
+        if sector in ("ETF", "Mutual Fund"):
+            if sym in fund_weightings:
+                # Expand into underlying sectors
+                for sec_name, weight in fund_weightings[sym].items():
+                    sector_values[sec_name] += val * weight
+            # If no weightings data, skip — don't penalize for unknown fund composition
         else:
             sector_values[sector] += val
 
@@ -61,6 +64,17 @@ def calculate_health_score(
     deductions = 0
 
     # ── Sector concentration (expands ETF/fund holdings into underlying sectors) ──
+    fund_weightings = fund_weightings or {}
+    unknown_funds = [
+        p["symbol"] for p in positions
+        if p.get("sector") in ("ETF", "Mutual Fund") and p.get("symbol") not in fund_weightings
+    ]
+    if unknown_funds:
+        issues.append({
+            "type": "fund_composition_unknown",
+            "severity": "low",
+            "message": f"Sector breakdown unavailable for {', '.join(unknown_funds)} — sector concentration analysis excludes these holdings.",
+        })
     sector_values = build_effective_sector_values(positions, fund_weightings)
 
     if total_value > 0:
