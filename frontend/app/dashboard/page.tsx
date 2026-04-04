@@ -279,7 +279,7 @@ export default function Dashboard() {
                   className="flex items-center gap-2 bg-violet-600 hover:bg-violet-500 disabled:opacity-50 px-5 py-2.5 rounded-xl text-sm font-medium transition shadow-lg shadow-violet-500/20"
                 >
                   {uploading === 'positions' ? <Spinner /> : <UploadIcon />}
-                  {uploading === 'positions' ? 'Fetching prices (~20s)...' : 'Upload Positions CSV'}
+                  {uploading === 'positions' ? 'Fetching prices & sectors (~30s)...' : 'Upload Positions CSV'}
                 </button>
                 <button
                   onClick={() => transactionsRef.current?.click()}

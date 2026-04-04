@@ -65,6 +65,12 @@ def fetch_sectors(symbols: List[str]) -> Dict[str, str]:
             try:
                 info = yf.Ticker(sym).info
                 sector = info.get("sector")
+                if not sector:
+                    quote_type = info.get("quoteType", "")
+                    if quote_type == "ETF":
+                        sector = "ETF"
+                    elif quote_type == "MUTUALFUND":
+                        sector = "Mutual Fund"
                 if sector:
                     sectors[sym] = sector
             except Exception:
