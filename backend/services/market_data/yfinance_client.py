@@ -56,8 +56,24 @@ def fetch_prices(symbols: List[str]) -> Dict[str, float]:
     return all_prices
 
 
+FUND_SECTOR_NAME_MAP = {
+    "technology": "Technology",
+    "healthcare": "Healthcare",
+    "financial_services": "Financial Services",
+    "consumer_cyclical": "Consumer Cyclical",
+    "consumer_defensive": "Consumer Defensive",
+    "industrials": "Industrials",
+    "basic_materials": "Basic Materials",
+    "real_estate": "Real Estate",
+    "communication_services": "Communication Services",
+    "energy": "Energy",
+    "utilities": "Utilities",
+}
+
+
 def fetch_sectors(symbols: List[str]) -> Dict[str, str]:
-    """Fetch sector for each symbol via ticker.info, in small batches with delays."""
+    """Fetch sector for each symbol. Returns sector string for stocks,
+    'ETF' or 'Mutual Fund' for funds (use fetch_fund_sector_weightings for breakdown)."""
     sectors: Dict[str, str] = {}
     for i in range(0, len(symbols), BATCH_SIZE):
         batch = symbols[i: i + BATCH_SIZE]
@@ -78,6 +94,42 @@ def fetch_sectors(symbols: List[str]) -> Dict[str, str]:
         if i + BATCH_SIZE < len(symbols):
             time.sleep(0.5)
     return sectors
+
+
+def fetch_fund_sector_weightings(symbols: List[str]) -> Dict[str, Dict[str, float]]:
+    """For ETFs and mutual funds, fetch their sector weightings.
+    Returns {symbol: {sector_name: weight_0_to_1, ...}}
+    Only returns entries for symbols that actually have weightings data."""
+    weightings: Dict[str, Dict[str, float]] = {}
+    for sym in symbols:
+        try:
+            ticker = yf.Ticker(sym)
+            fund_sectors = ticker.funds_data.sector_weightings if hasattr(ticker, 'funds_data') and ticker.funds_data is not None else None
+            if fund_sectors is None:
+                # Fallback: try info-level sector weightings
+                info = ticker.info
+                if info.get("quoteType") not in ("ETF", "MUTUALFUND"):
+                    continue
+                fund_sectors = info.get("sectorWeightings", [])
+                if isinstance(fund_sectors, list) and fund_sectors:
+                    merged: Dict[str, float] = {}
+                    for entry in fund_sectors:
+                        merged.update(entry)
+                    fund_sectors = merged
+                else:
+                    continue
+            if isinstance(fund_sectors, dict) and fund_sectors:
+                normalized = {
+                    FUND_SECTOR_NAME_MAP.get(k, k.replace("_", " ").title()): float(v)
+                    for k, v in fund_sectors.items()
+                    if float(v) > 0.01  # ignore < 1% noise
+                }
+                if normalized:
+                    weightings[sym] = normalized
+        except Exception:
+            pass
+        time.sleep(0.3)
+    return weightings
 
 
 def _enrich_sync(positions: List[Dict[str, Any]], include_sectors: bool = False) -> List[Dict[str, Any]]:

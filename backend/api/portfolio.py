@@ -7,7 +7,7 @@ from services.csv_parser.fidelity import (
     parse_fidelity_transactions,
     reconstruct_tax_lots,
 )
-from services.market_data.yfinance_client import enrich_positions_with_prices, fetch_prices, fetch_sectors
+from services.market_data.yfinance_client import enrich_positions_with_prices, fetch_sectors, fetch_fund_sector_weightings
 from services.db.supabase_client import (
     get_supabase,
     get_or_create_portfolio,
@@ -30,31 +30,27 @@ async def get_current_user(credentials: HTTPAuthorizationCredentials = Depends(s
         raise HTTPException(status_code=401, detail="Invalid or expired token")
 
 
+def _get_fund_weightings(positions):
+    """Fetch fund sector weightings for any ETF/mutual fund positions."""
+    fund_symbols = [
+        p["symbol"] for p in positions
+        if p.get("sector") in ("ETF", "Mutual Fund") and p.get("symbol")
+    ]
+    return fetch_fund_sector_weightings(fund_symbols) if fund_symbols else {}
+
+
 @router.get("")
 async def get_portfolio(user_id: str = Depends(get_current_user)):
+    import asyncio
     portfolio = get_or_create_portfolio(user_id)
     positions = get_positions(portfolio["id"])
-    health = calculate_health_score(positions)
+    fund_weightings = await asyncio.to_thread(_get_fund_weightings, positions)
+    health = calculate_health_score(positions, fund_weightings)
     return {
         "portfolio": portfolio,
         "positions": positions,
         "health": health,
     }
-
-
-def _backfill_sectors(portfolio_id: str):
-    """Background task: fetch sectors and update positions in DB."""
-    import logging
-    log = logging.getLogger(__name__)
-    sb = get_supabase()
-    rows = sb.table("positions").select("id, symbol").eq("portfolio_id", portfolio_id).execute().data or []
-    symbols = [r["symbol"] for r in rows if r.get("symbol")]
-    sectors = fetch_sectors(symbols)
-    for row in rows:
-        sector = sectors.get(row["symbol"])
-        if sector:
-            sb.table("positions").update({"sector": sector}).eq("id", row["id"]).execute()
-    log.info(f"Sector backfill complete: {len(sectors)} sectors fetched for portfolio {portfolio_id}")
 
 
 @router.post("/import/positions")
@@ -79,7 +75,9 @@ async def import_positions(
         "last_import_at": datetime.now(timezone.utc).isoformat(),
     }).eq("id", portfolio["id"]).execute()
 
-    health = calculate_health_score(positions)
+    import asyncio
+    fund_weightings = await asyncio.to_thread(_get_fund_weightings, positions)
+    health = calculate_health_score(positions, fund_weightings)
 
     return {
         "imported": len(positions),
@@ -117,5 +115,6 @@ async def refresh_prices(user_id: str = Depends(get_current_user)):
     n = await asyncio.to_thread(_refresh_prices_sync)
     portfolio = get_or_create_portfolio(user_id)
     positions = get_positions(portfolio["id"])
-    health = calculate_health_score(positions)
+    fund_weightings = await asyncio.to_thread(_get_fund_weightings, positions)
+    health = calculate_health_score(positions, fund_weightings)
     return {"updated": n, "positions": positions, "health": health}

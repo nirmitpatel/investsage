@@ -8,11 +8,43 @@ Scores 0-100 based on:
   - Overall performance (10 pts)
 """
 
-from typing import List, Dict, Any
+from typing import List, Dict, Any, Optional
 from collections import defaultdict
 
 
-def calculate_health_score(positions: List[Dict[str, Any]]) -> Dict[str, Any]:
+def build_effective_sector_values(
+    positions: List[Dict[str, Any]],
+    fund_weightings: Optional[Dict[str, Dict[str, float]]] = None,
+) -> Dict[str, float]:
+    """
+    Build a sector → dollar_value map that expands ETF/mutual fund positions
+    into their underlying sector weightings.
+
+    For stocks: full position value goes to their sector.
+    For funds with known weightings: value is distributed proportionally.
+    For funds without weightings: value goes to "ETF" or "Mutual Fund" bucket.
+    """
+    sector_values: Dict[str, float] = defaultdict(float)
+    fund_weightings = fund_weightings or {}
+
+    for p in positions:
+        val = p.get("current_value") or 0
+        sector = p.get("sector") or "Unknown"
+        sym = p.get("symbol", "")
+
+        if sector in ("ETF", "Mutual Fund") and sym in fund_weightings:
+            for sec_name, weight in fund_weightings[sym].items():
+                sector_values[sec_name] += val * weight
+        else:
+            sector_values[sector] += val
+
+    return dict(sector_values)
+
+
+def calculate_health_score(
+    positions: List[Dict[str, Any]],
+    fund_weightings: Optional[Dict[str, Dict[str, float]]] = None,
+) -> Dict[str, Any]:
     if not positions:
         return {
             "score": 0,
@@ -28,12 +60,8 @@ def calculate_health_score(positions: List[Dict[str, Any]]) -> Dict[str, Any]:
     issues = []
     deductions = 0
 
-    # ── Sector concentration ──────────────────────────────────────────
-    sector_values: Dict[str, float] = defaultdict(float)
-    for p in positions:
-        val = p.get("current_value") or 0
-        sector = p.get("sector") or "Unknown"
-        sector_values[sector] += val
+    # ── Sector concentration (expands ETF/fund holdings into underlying sectors) ──
+    sector_values = build_effective_sector_values(positions, fund_weightings)
 
     if total_value > 0:
         for sector, val in sector_values.items():
