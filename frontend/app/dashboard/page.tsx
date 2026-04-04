@@ -47,8 +47,10 @@ interface Health {
   total_gain_loss: number
   position_count: number
   issues: HealthIssue[]
+  notes: string[]
   sector_breakdown: SectorBreakdownItem[]
   investment_style: InvestmentStyle
+  market_trends_period: string
 }
 
 const STYLE_CONFIG = {
@@ -140,50 +142,104 @@ function ScoreRing({ score }: { score: number }) {
   )
 }
 
+const SECTOR_COLORS = [
+  '#8b5cf6', '#06b6d4', '#10b981', '#f59e0b', '#3b82f6',
+  '#ef4444', '#ec4899', '#84cc16', '#f97316', '#6366f1', '#14b8a6',
+]
+
 function TrendBadge({ pct }: { pct: number }) {
   const pos = pct >= 0
   return (
-    <span className={`text-[10px] font-semibold px-1.5 py-0.5 rounded-md ${pos ? 'bg-emerald-500/15 text-emerald-400' : 'bg-red-500/15 text-red-400'}`}>
+    <span className={`text-[10px] font-semibold px-1.5 py-0.5 rounded-md whitespace-nowrap ${pos ? 'bg-emerald-500/15 text-emerald-400' : 'bg-red-500/15 text-red-400'}`}>
       {pos ? '+' : ''}{pct.toFixed(1)}%
     </span>
   )
 }
 
-function SectorBreakdownPanel({ breakdown }: { breakdown: SectorBreakdownItem[] }) {
+function DonutChart({ breakdown }: { breakdown: SectorBreakdownItem[] }) {
+  const r = 58
+  const cx = 80
+  const cy = 80
+  const sw = 22
+  const circ = 2 * Math.PI * r
+  const gap = 2.5
+
+  let cumLen = 0
+  const segments = breakdown.map((item, i) => {
+    const arcLen = (item.pct / 100) * circ
+    const seg = {
+      dasharray: `${Math.max(0, arcLen - gap)} ${circ}`,
+      dashoffset: -cumLen,
+      color: SECTOR_COLORS[i % SECTOR_COLORS.length],
+    }
+    cumLen += arcLen
+    return seg
+  })
+
+  return (
+    <svg width="160" height="160" className="-rotate-90" style={{ minWidth: 160 }}>
+      <circle cx={cx} cy={cy} r={r} fill="none" stroke="#151520" strokeWidth={sw} />
+      {segments.map((seg, i) => (
+        <circle
+          key={i}
+          cx={cx} cy={cy} r={r}
+          fill="none"
+          stroke={seg.color}
+          strokeWidth={sw}
+          strokeDasharray={seg.dasharray}
+          strokeDashoffset={seg.dashoffset}
+        />
+      ))}
+    </svg>
+  )
+}
+
+function SectorBreakdownPanel({ breakdown, period }: { breakdown: SectorBreakdownItem[]; period?: string }) {
   if (!breakdown || breakdown.length === 0) return null
-  const max = Math.max(...breakdown.map(b => b.pct))
+  const hasTrends = breakdown.some(b => b.market_trend != null)
 
   return (
     <div className="bg-white/[0.03] border border-white/[0.08] rounded-2xl p-6">
-      <h2 className="font-semibold mb-1 flex items-center gap-2">
-        <svg className="w-4 h-4 text-violet-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.8}>
-          <path strokeLinecap="round" strokeLinejoin="round" d="M11 3.055A9.001 9.001 0 1020.945 13H11V3.055z" />
-          <path strokeLinecap="round" strokeLinejoin="round" d="M20.488 9H15V3.512A9.025 9.025 0 0120.488 9z" />
-        </svg>
-        Sector Exposure
-      </h2>
-      <p className="text-xs text-gray-500 mb-5">ETF & fund holdings expanded to underlying sectors · 1-month market trend shown where available</p>
-      <div className="space-y-3">
-        {breakdown.map((item) => (
-          <div key={item.sector}>
-            <div className="flex items-center justify-between mb-1.5">
-              <div className="flex items-center gap-2">
-                <span className="text-sm text-gray-200 font-medium">{item.sector}</span>
-                {item.market_trend != null && <TrendBadge pct={item.market_trend} />}
-              </div>
-              <div className="flex items-center gap-2">
-                <span className="text-xs text-gray-500">{fmt(item.value, '$')}</span>
-                <span className="text-xs text-gray-400 font-semibold w-10 text-right">{item.pct}%</span>
-              </div>
-            </div>
-            <div className="h-1.5 bg-white/[0.05] rounded-full overflow-hidden">
-              <div
-                className="h-full rounded-full bg-gradient-to-r from-violet-500 to-violet-400 transition-all duration-700"
-                style={{ width: `${(item.pct / max) * 100}%` }}
-              />
-            </div>
+      <div className="flex items-start justify-between mb-5">
+        <div>
+          <h2 className="font-semibold flex items-center gap-2">
+            <svg className="w-4 h-4 text-violet-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.8}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M11 3.055A9.001 9.001 0 1020.945 13H11V3.055z" />
+              <path strokeLinecap="round" strokeLinejoin="round" d="M20.488 9H15V3.512A9.025 9.025 0 0120.488 9z" />
+            </svg>
+            Sector Exposure
+          </h2>
+          <p className="text-xs text-gray-500 mt-0.5">
+            ETF & fund holdings expanded to underlying sectors
+            {hasTrends && period && ` · ${period} market trend`}
+          </p>
+        </div>
+      </div>
+
+      <div className="flex gap-8 items-center">
+        {/* Donut chart */}
+        <div className="relative shrink-0">
+          <DonutChart breakdown={breakdown} />
+          <div className="absolute inset-0 flex flex-col items-center justify-center">
+            <span className="text-xl font-bold text-white">{breakdown.length}</span>
+            <span className="text-[10px] text-gray-500 uppercase tracking-wide">sectors</span>
           </div>
-        ))}
+        </div>
+
+        {/* Legend */}
+        <div className="flex-1 space-y-2.5 min-w-0">
+          {breakdown.map((item, i) => (
+            <div key={item.sector} className="flex items-center gap-2.5 min-w-0">
+              <span
+                className="w-2.5 h-2.5 rounded-sm shrink-0"
+                style={{ background: SECTOR_COLORS[i % SECTOR_COLORS.length] }}
+              />
+              <span className="text-sm text-gray-300 flex-1 truncate">{item.sector}</span>
+              {item.market_trend != null && <TrendBadge pct={item.market_trend} />}
+              <span className="text-sm font-semibold text-white tabular-nums shrink-0">{item.pct}%</span>
+            </div>
+          ))}
+        </div>
       </div>
     </div>
   )
@@ -564,7 +620,7 @@ export default function Dashboard() {
                   </div>
                   <div>
                     <p className={`text-4xl font-bold ${gradeColor(health.grade)}`}>{health.grade}</p>
-                    <p className="text-xs text-gray-500 mt-1">{health.issues.length} issue{health.issues.length !== 1 ? 's' : ''}</p>
+                    <p className="text-xs text-gray-500 mt-1">{health.issues.length} issue{health.issues.length !== 1 ? 's' : ''} found</p>
                     {styleCfg && (
                       <p className={`text-xs mt-1 font-medium ${styleCfg.color}`}>{styleCfg.emoji} {styleCfg.label}</p>
                     )}
@@ -578,7 +634,7 @@ export default function Dashboard() {
 
           {/* Sector Breakdown */}
           {health && health.sector_breakdown && health.sector_breakdown.length > 0 && (
-            <SectorBreakdownPanel breakdown={health.sector_breakdown} />
+            <SectorBreakdownPanel breakdown={health.sector_breakdown} period={health.market_trends_period} />
           )}
 
           {/* Health Issues */}
@@ -598,6 +654,20 @@ export default function Dashboard() {
                   </div>
                 ))}
               </div>
+            </div>
+          )}
+
+          {/* Notes (informational, no score impact) */}
+          {health && health.notes && health.notes.length > 0 && (
+            <div className="px-1">
+              {health.notes.map((note, i) => (
+                <p key={i} className="text-xs text-gray-600 flex items-start gap-1.5">
+                  <svg className="w-3.5 h-3.5 mt-0.5 shrink-0 text-gray-700" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                  </svg>
+                  {note}
+                </p>
+              ))}
             </div>
           )}
 

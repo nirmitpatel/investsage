@@ -31,6 +31,12 @@ security = HTTPBearer()
 
 VALID_STYLES = {"play_it_safe", "beat_the_market", "long_game"}
 
+STYLE_TREND_PERIOD = {
+    "play_it_safe": "1y",
+    "beat_the_market": "3mo",
+    "long_game": "2y",
+}
+
 
 async def get_current_user(credentials: HTTPAuthorizationCredentials = Depends(security)) -> str:
     try:
@@ -50,21 +56,18 @@ def _get_fund_weightings(positions):
     return fetch_fund_sector_weightings(fund_symbols) if fund_symbols else {}
 
 
-def _get_market_trends(sector_values: dict) -> dict:
-    """Fetch 1-month market trend for each known sector."""
-    return fetch_sector_etf_performance(list(sector_values.keys()))
-
 
 def _build_health(positions, portfolio, include_trends: bool = True):
     """Sync helper: fetch fund weightings + market trends, then calculate health."""
     from services.health_score import build_effective_sector_values
     fund_weightings = _get_fund_weightings(positions)
     investment_style = portfolio.get("investment_style")
+    period = STYLE_TREND_PERIOD.get(investment_style, "3mo")
 
     market_trends = {}
     if include_trends:
         sector_values = build_effective_sector_values(positions, fund_weightings)
-        market_trends = _get_market_trends(sector_values)
+        market_trends = fetch_sector_etf_performance(list(sector_values.keys()), period=period)
 
     return calculate_health_score(positions, fund_weightings, investment_style, market_trends)
 

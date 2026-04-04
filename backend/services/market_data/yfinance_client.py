@@ -114,16 +114,16 @@ SECTOR_ETFS: Dict[str, str] = {
 }
 
 
-def fetch_sector_etf_performance(sectors: List[str]) -> Dict[str, float]:
-    """Fetch 1-month % change for SPDR sector ETFs matching the given sectors.
-    Returns {sector_name: percent_change_1m}"""
+def fetch_sector_etf_performance(sectors: List[str], period: str = "3mo") -> Dict[str, float]:
+    """Fetch % change over `period` for SPDR sector ETFs matching the given sectors.
+    Returns {sector_name: percent_change}"""
     etf_to_sector = {v: k for k, v in SECTOR_ETFS.items()}
     relevant_etfs = [SECTOR_ETFS[s] for s in sectors if s in SECTOR_ETFS]
     if not relevant_etfs:
         return {}
     result: Dict[str, float] = {}
     try:
-        data = yf.download(relevant_etfs, period="1mo", auto_adjust=True, progress=False, threads=False)
+        data = yf.download(relevant_etfs, period=period, auto_adjust=True, progress=False, threads=False)
         if data.empty:
             return {}
         close = data["Close"] if "Close" in data.columns else data
