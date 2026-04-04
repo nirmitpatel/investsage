@@ -96,11 +96,15 @@ def fetch_sectors(symbols: List[str]) -> Dict[str, str]:
     return sectors
 
 
+log = logging.getLogger(__name__)
+
+
 def fetch_fund_sector_weightings(symbols: List[str]) -> Dict[str, Dict[str, float]]:
     """For ETFs and mutual funds, fetch their sector weightings.
     Returns {symbol: {sector_name: weight_0_to_1, ...}}
     Only returns entries for symbols that actually have weightings data."""
     weightings: Dict[str, Dict[str, float]] = {}
+    log.info(f"Fetching fund sector weightings for: {symbols}")
     for sym in symbols:
         try:
             ticker = yf.Ticker(sym)
@@ -126,9 +130,13 @@ def fetch_fund_sector_weightings(symbols: List[str]) -> Dict[str, Dict[str, floa
                 }
                 if normalized:
                     weightings[sym] = normalized
-        except Exception:
-            pass
+                    log.info(f"Fund weightings for {sym}: {normalized}")
+                else:
+                    log.warning(f"No weightings found for {sym}")
+        except Exception as e:
+            log.warning(f"Failed to fetch fund weightings for {sym}: {e}")
         time.sleep(0.3)
+    log.info(f"Fund weightings result: {list(weightings.keys())}")
     return weightings
 
 
