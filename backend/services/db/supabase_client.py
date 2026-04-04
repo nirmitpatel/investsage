@@ -31,6 +31,12 @@ def get_or_create_portfolio(user_id: str) -> Dict[str, Any]:
     return created.data[0]
 
 
+def update_portfolio_style(portfolio_id: str, investment_style: str) -> None:
+    get_supabase().table("portfolios").update(
+        {"investment_style": investment_style}
+    ).eq("id", portfolio_id).execute()
+
+
 def upsert_positions(portfolio_id: str, user_id: str, positions: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
     sb = get_supabase()
     sb.table("positions").delete().eq("portfolio_id", portfolio_id).execute()

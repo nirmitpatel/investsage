@@ -6,6 +6,14 @@ import { createClient } from '@/lib/supabase'
 
 const API = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:8000'
 
+type InvestmentStyle = 'play_it_safe' | 'beat_the_market' | 'long_game' | null
+
+interface Portfolio {
+  id: string
+  investment_style: InvestmentStyle
+  last_import_at: string | null
+}
+
 interface Position {
   symbol: string
   description: string
@@ -25,6 +33,13 @@ interface HealthIssue {
   message: string
 }
 
+interface SectorBreakdownItem {
+  sector: string
+  value: number
+  pct: number
+  market_trend?: number
+}
+
 interface Health {
   score: number
   grade: string
@@ -32,6 +47,35 @@ interface Health {
   total_gain_loss: number
   position_count: number
   issues: HealthIssue[]
+  sector_breakdown: SectorBreakdownItem[]
+  investment_style: InvestmentStyle
+}
+
+const STYLE_CONFIG = {
+  play_it_safe: {
+    label: 'Play it safe',
+    emoji: '🛡️',
+    desc: 'Conservative — capital preservation, low volatility',
+    color: 'text-blue-300',
+    bg: 'bg-blue-500/10 border-blue-500/30',
+    dot: 'bg-blue-400',
+  },
+  beat_the_market: {
+    label: 'Beat the market',
+    emoji: '⚡',
+    desc: 'Aggressive — outperform the S&P 500',
+    color: 'text-violet-300',
+    bg: 'bg-violet-500/10 border-violet-500/30',
+    dot: 'bg-violet-400',
+  },
+  long_game: {
+    label: 'Long game',
+    emoji: '🌱',
+    desc: 'Patient — decades-long compounding',
+    color: 'text-emerald-300',
+    bg: 'bg-emerald-500/10 border-emerald-500/30',
+    dot: 'bg-emerald-400',
+  },
 }
 
 function fmt(n: number | null, prefix = '') {
@@ -96,10 +140,124 @@ function ScoreRing({ score }: { score: number }) {
   )
 }
 
+function TrendBadge({ pct }: { pct: number }) {
+  const pos = pct >= 0
+  return (
+    <span className={`text-[10px] font-semibold px-1.5 py-0.5 rounded-md ${pos ? 'bg-emerald-500/15 text-emerald-400' : 'bg-red-500/15 text-red-400'}`}>
+      {pos ? '+' : ''}{pct.toFixed(1)}%
+    </span>
+  )
+}
+
+function SectorBreakdownPanel({ breakdown }: { breakdown: SectorBreakdownItem[] }) {
+  if (!breakdown || breakdown.length === 0) return null
+  const max = Math.max(...breakdown.map(b => b.pct))
+
+  return (
+    <div className="bg-white/[0.03] border border-white/[0.08] rounded-2xl p-6">
+      <h2 className="font-semibold mb-1 flex items-center gap-2">
+        <svg className="w-4 h-4 text-violet-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.8}>
+          <path strokeLinecap="round" strokeLinejoin="round" d="M11 3.055A9.001 9.001 0 1020.945 13H11V3.055z" />
+          <path strokeLinecap="round" strokeLinejoin="round" d="M20.488 9H15V3.512A9.025 9.025 0 0120.488 9z" />
+        </svg>
+        Sector Exposure
+      </h2>
+      <p className="text-xs text-gray-500 mb-5">ETF & fund holdings expanded to underlying sectors · 1-month market trend shown where available</p>
+      <div className="space-y-3">
+        {breakdown.map((item) => (
+          <div key={item.sector}>
+            <div className="flex items-center justify-between mb-1.5">
+              <div className="flex items-center gap-2">
+                <span className="text-sm text-gray-200 font-medium">{item.sector}</span>
+                {item.market_trend != null && <TrendBadge pct={item.market_trend} />}
+              </div>
+              <div className="flex items-center gap-2">
+                <span className="text-xs text-gray-500">{fmt(item.value, '$')}</span>
+                <span className="text-xs text-gray-400 font-semibold w-10 text-right">{item.pct}%</span>
+              </div>
+            </div>
+            <div className="h-1.5 bg-white/[0.05] rounded-full overflow-hidden">
+              <div
+                className="h-full rounded-full bg-gradient-to-r from-violet-500 to-violet-400 transition-all duration-700"
+                style={{ width: `${(item.pct / max) * 100}%` }}
+              />
+            </div>
+          </div>
+        ))}
+      </div>
+    </div>
+  )
+}
+
+interface StyleModalProps {
+  currentStyle: InvestmentStyle
+  saving: boolean
+  onSelect: (style: InvestmentStyle) => void
+  onClose?: () => void
+}
+
+function InvestmentStyleModal({ currentStyle, saving, onSelect, onClose }: StyleModalProps) {
+  const styles = (['play_it_safe', 'beat_the_market', 'long_game'] as const)
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm p-4">
+      <div className="bg-[#0f0f1a] border border-white/[0.10] rounded-2xl p-8 max-w-md w-full shadow-2xl">
+        <div className="flex items-start justify-between mb-2">
+          <h2 className="text-xl font-bold">What's your investment style?</h2>
+          {onClose && (
+            <button onClick={onClose} className="text-gray-500 hover:text-gray-300 transition ml-4">
+              <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+              </svg>
+            </button>
+          )}
+        </div>
+        <p className="text-gray-500 text-sm mb-6">
+          This shapes how your portfolio health is evaluated and what insights you see.
+        </p>
+        <div className="space-y-3">
+          {styles.map((s) => {
+            const cfg = STYLE_CONFIG[s]
+            const selected = currentStyle === s
+            return (
+              <button
+                key={s}
+                onClick={() => onSelect(s)}
+                disabled={saving}
+                className={`w-full flex items-center gap-4 p-4 rounded-xl border text-left transition
+                  ${selected
+                    ? `${cfg.bg} border-opacity-100`
+                    : 'border-white/[0.08] hover:bg-white/[0.04]'
+                  } disabled:opacity-60`}
+              >
+                <span className="text-2xl">{cfg.emoji}</span>
+                <div className="flex-1">
+                  <p className={`font-semibold ${selected ? cfg.color : 'text-gray-200'}`}>{cfg.label}</p>
+                  <p className="text-xs text-gray-500 mt-0.5">{cfg.desc}</p>
+                </div>
+                {selected && (
+                  <svg className={`w-5 h-5 shrink-0 ${cfg.color}`} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
+                  </svg>
+                )}
+              </button>
+            )
+          })}
+        </div>
+        {saving && (
+          <p className="text-center text-sm text-gray-500 mt-5 flex items-center justify-center gap-2">
+            <Spinner /> Saving...
+          </p>
+        )}
+      </div>
+    </div>
+  )
+}
+
 export default function Dashboard() {
   const router = useRouter()
   const supabase = createClient()
 
+  const [portfolio, setPortfolio] = useState<Portfolio | null>(null)
   const [positions, setPositions] = useState<Position[]>([])
   const [health, setHealth] = useState<Health | null>(null)
   const [uploading, setUploading] = useState<'positions' | 'transactions' | null>(null)
@@ -108,6 +266,8 @@ export default function Dashboard() {
   const [loadingPortfolio, setLoadingPortfolio] = useState(true)
   const [refreshing, setRefreshing] = useState(false)
   const [showImport, setShowImport] = useState(false)
+  const [showStyleModal, setShowStyleModal] = useState(false)
+  const [savingStyle, setSavingStyle] = useState(false)
 
   const positionsRef = useRef<HTMLInputElement>(null)
   const transactionsRef = useRef<HTMLInputElement>(null)
@@ -132,10 +292,34 @@ export default function Dashboard() {
     if (res.status === 401) { router.push('/login'); return }
     if (res.ok) {
       const data = await res.json()
+      setPortfolio(data.portfolio ?? null)
       setPositions(data.positions ?? [])
       setHealth(data.health ?? null)
+      // Show style modal if not yet set and they have positions
+      if (!data.portfolio?.investment_style && (data.positions?.length ?? 0) > 0) {
+        setShowStyleModal(true)
+      }
     }
     setLoadingPortfolio(false)
+  }
+
+  async function handleSelectStyle(style: InvestmentStyle) {
+    if (!style) return
+    setSavingStyle(true)
+    const token = await getToken()
+    if (!token) return
+    const res = await fetch(`${API}/api/v1/portfolio`, {
+      method: 'PATCH',
+      headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ investment_style: style }),
+    })
+    setSavingStyle(false)
+    if (res.ok) {
+      const data = await res.json()
+      setPortfolio(p => p ? { ...p, investment_style: style } : null)
+      setHealth(data.health ?? null)
+      setShowStyleModal(false)
+    }
   }
 
   async function handleUpload(type: 'positions' | 'transactions', file: File) {
@@ -163,6 +347,8 @@ export default function Dashboard() {
         setPositions(data.positions ?? [])
         setHealth(data.health ?? null)
         setUploadMsg(`Imported ${data.imported} positions`)
+        // Prompt for style if not set
+        if (!portfolio?.investment_style) setShowStyleModal(true)
       } else {
         setUploadMsg(`Imported ${data.imported} transactions · ${data.tax_lots_reconstructed} tax lots reconstructed`)
       }
@@ -196,9 +382,21 @@ export default function Dashboard() {
 
   const gainLoss = health?.total_gain_loss ?? null
   const gainLossAbs = gainLoss != null ? Math.abs(gainLoss) : null
+  const investmentStyle = portfolio?.investment_style ?? health?.investment_style ?? null
+  const styleCfg = investmentStyle ? STYLE_CONFIG[investmentStyle] : null
 
   return (
     <div className="min-h-screen bg-[#0a0a0f] text-white flex">
+      {/* Investment style modal */}
+      {showStyleModal && (
+        <InvestmentStyleModal
+          currentStyle={investmentStyle}
+          saving={savingStyle}
+          onSelect={handleSelectStyle}
+          onClose={positions.length > 0 ? () => setShowStyleModal(false) : undefined}
+        />
+      )}
+
       {/* Sidebar */}
       <aside className="w-60 shrink-0 border-r border-white/[0.06] flex flex-col py-6 px-4">
         {/* Logo */}
@@ -235,10 +433,31 @@ export default function Dashboard() {
       <main className="flex-1 overflow-y-auto">
         {/* Top bar */}
         <div className="sticky top-0 z-10 bg-[#0a0a0f]/80 backdrop-blur border-b border-white/[0.06] px-8 py-4 flex items-center justify-between">
-          <div>
-            <h1 className="text-lg font-semibold">Portfolio Overview</h1>
-            {health && (
-              <p className="text-xs text-gray-500">{health.position_count} positions</p>
+          <div className="flex items-center gap-3">
+            <div>
+              <h1 className="text-lg font-semibold">Portfolio Overview</h1>
+              {health && (
+                <p className="text-xs text-gray-500">{health.position_count} positions</p>
+              )}
+            </div>
+            {/* Style badge */}
+            {styleCfg && (
+              <button
+                onClick={() => setShowStyleModal(true)}
+                title="Change investment style"
+                className={`flex items-center gap-1.5 text-xs font-medium px-2.5 py-1 rounded-full border transition hover:opacity-80 ${styleCfg.bg} ${styleCfg.color}`}
+              >
+                <span>{styleCfg.emoji}</span>
+                <span>{styleCfg.label}</span>
+              </button>
+            )}
+            {!styleCfg && !loadingPortfolio && positions.length > 0 && (
+              <button
+                onClick={() => setShowStyleModal(true)}
+                className="text-xs text-gray-500 border border-white/[0.08] px-2.5 py-1 rounded-full hover:text-gray-300 transition"
+              >
+                Set style
+              </button>
             )}
           </div>
           <div className="flex items-center gap-3">
@@ -346,6 +565,9 @@ export default function Dashboard() {
                   <div>
                     <p className={`text-4xl font-bold ${gradeColor(health.grade)}`}>{health.grade}</p>
                     <p className="text-xs text-gray-500 mt-1">{health.issues.length} issue{health.issues.length !== 1 ? 's' : ''}</p>
+                    {styleCfg && (
+                      <p className={`text-xs mt-1 font-medium ${styleCfg.color}`}>{styleCfg.emoji} {styleCfg.label}</p>
+                    )}
                   </div>
                 </div>
               ) : (
@@ -353,6 +575,11 @@ export default function Dashboard() {
               )}
             </div>
           </div>
+
+          {/* Sector Breakdown */}
+          {health && health.sector_breakdown && health.sector_breakdown.length > 0 && (
+            <SectorBreakdownPanel breakdown={health.sector_breakdown} />
+          )}
 
           {/* Health Issues */}
           {health && health.issues.length > 0 && (

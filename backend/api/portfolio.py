@@ -1,24 +1,35 @@
 from fastapi import APIRouter, UploadFile, File, HTTPException, Depends, BackgroundTasks
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from datetime import datetime, timezone
+from pydantic import BaseModel
+from typing import Optional
+import asyncio
 
 from services.csv_parser.fidelity import (
     parse_fidelity_positions,
     parse_fidelity_transactions,
     reconstruct_tax_lots,
 )
-from services.market_data.yfinance_client import enrich_positions_with_prices, fetch_sectors, fetch_fund_sector_weightings
+from services.market_data.yfinance_client import (
+    enrich_positions_with_prices,
+    fetch_sectors,
+    fetch_fund_sector_weightings,
+    fetch_sector_etf_performance,
+)
 from services.db.supabase_client import (
     get_supabase,
     get_or_create_portfolio,
     upsert_positions,
     get_positions,
     save_tax_lots,
+    update_portfolio_style,
 )
 from services.health_score import calculate_health_score
 
 router = APIRouter()
 security = HTTPBearer()
+
+VALID_STYLES = {"play_it_safe", "beat_the_market", "long_game"}
 
 
 async def get_current_user(credentials: HTTPAuthorizationCredentials = Depends(security)) -> str:
@@ -39,18 +50,55 @@ def _get_fund_weightings(positions):
     return fetch_fund_sector_weightings(fund_symbols) if fund_symbols else {}
 
 
+def _get_market_trends(sector_values: dict) -> dict:
+    """Fetch 1-month market trend for each known sector."""
+    return fetch_sector_etf_performance(list(sector_values.keys()))
+
+
+def _build_health(positions, portfolio, include_trends: bool = True):
+    """Sync helper: fetch fund weightings + market trends, then calculate health."""
+    from services.health_score import build_effective_sector_values
+    fund_weightings = _get_fund_weightings(positions)
+    investment_style = portfolio.get("investment_style")
+
+    market_trends = {}
+    if include_trends:
+        sector_values = build_effective_sector_values(positions, fund_weightings)
+        market_trends = _get_market_trends(sector_values)
+
+    return calculate_health_score(positions, fund_weightings, investment_style, market_trends)
+
+
 @router.get("")
 async def get_portfolio(user_id: str = Depends(get_current_user)):
-    import asyncio
     portfolio = get_or_create_portfolio(user_id)
     positions = get_positions(portfolio["id"])
-    fund_weightings = await asyncio.to_thread(_get_fund_weightings, positions)
-    health = calculate_health_score(positions, fund_weightings)
+    health = await asyncio.to_thread(_build_health, positions, portfolio)
     return {
         "portfolio": portfolio,
         "positions": positions,
         "health": health,
     }
+
+
+class StyleUpdate(BaseModel):
+    investment_style: str
+
+
+@router.patch("")
+async def update_investment_style(
+    body: StyleUpdate,
+    user_id: str = Depends(get_current_user),
+):
+    if body.investment_style not in VALID_STYLES:
+        raise HTTPException(status_code=400, detail=f"investment_style must be one of {VALID_STYLES}")
+    portfolio = get_or_create_portfolio(user_id)
+    update_portfolio_style(portfolio["id"], body.investment_style)
+    # Re-run health score with new style
+    positions = get_positions(portfolio["id"])
+    portfolio["investment_style"] = body.investment_style
+    health = await asyncio.to_thread(_build_health, positions, portfolio)
+    return {"investment_style": body.investment_style, "health": health}
 
 
 @router.post("/import/positions")
@@ -75,9 +123,7 @@ async def import_positions(
         "last_import_at": datetime.now(timezone.utc).isoformat(),
     }).eq("id", portfolio["id"]).execute()
 
-    import asyncio
-    fund_weightings = await asyncio.to_thread(_get_fund_weightings, positions)
-    health = calculate_health_score(positions, fund_weightings)
+    health = await asyncio.to_thread(_build_health, positions, portfolio)
 
     return {
         "imported": len(positions),
@@ -110,11 +156,9 @@ async def import_transactions(
 @router.post("/refresh-prices")
 async def refresh_prices(user_id: str = Depends(get_current_user)):
     """Manually trigger a price refresh for this user's positions."""
-    import asyncio
     from services.price_refresh import _refresh_prices_sync
     n = await asyncio.to_thread(_refresh_prices_sync)
     portfolio = get_or_create_portfolio(user_id)
     positions = get_positions(portfolio["id"])
-    fund_weightings = await asyncio.to_thread(_get_fund_weightings, positions)
-    health = calculate_health_score(positions, fund_weightings)
+    health = await asyncio.to_thread(_build_health, positions, portfolio)
     return {"updated": n, "positions": positions, "health": health}

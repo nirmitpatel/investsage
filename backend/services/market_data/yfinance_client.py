@@ -99,6 +99,51 @@ def fetch_sectors(symbols: List[str]) -> Dict[str, str]:
 log = logging.getLogger(__name__)
 
 
+SECTOR_ETFS: Dict[str, str] = {
+    "Technology": "XLK",
+    "Healthcare": "XLV",
+    "Financial Services": "XLF",
+    "Consumer Cyclical": "XLY",
+    "Consumer Defensive": "XLP",
+    "Industrials": "XLI",
+    "Basic Materials": "XLB",
+    "Real Estate": "XLRE",
+    "Communication Services": "XLC",
+    "Energy": "XLE",
+    "Utilities": "XLU",
+}
+
+
+def fetch_sector_etf_performance(sectors: List[str]) -> Dict[str, float]:
+    """Fetch 1-month % change for SPDR sector ETFs matching the given sectors.
+    Returns {sector_name: percent_change_1m}"""
+    etf_to_sector = {v: k for k, v in SECTOR_ETFS.items()}
+    relevant_etfs = [SECTOR_ETFS[s] for s in sectors if s in SECTOR_ETFS]
+    if not relevant_etfs:
+        return {}
+    result: Dict[str, float] = {}
+    try:
+        data = yf.download(relevant_etfs, period="1mo", auto_adjust=True, progress=False, threads=False)
+        if data.empty:
+            return {}
+        close = data["Close"] if "Close" in data.columns else data
+        for etf in relevant_etfs:
+            try:
+                if len(relevant_etfs) == 1:
+                    series = close.dropna()
+                else:
+                    col = close[etf] if etf in close.columns else None
+                    series = col.dropna() if col is not None else None
+                if series is not None and len(series) >= 2:
+                    pct = ((float(series.iloc[-1]) - float(series.iloc[0])) / float(series.iloc[0])) * 100
+                    result[etf_to_sector[etf]] = round(pct, 2)
+            except Exception:
+                pass
+    except Exception as e:
+        log.warning(f"Failed to fetch sector ETF performance: {e}")
+    return result
+
+
 def fetch_fund_sector_weightings(symbols: List[str]) -> Dict[str, Dict[str, float]]:
     """For ETFs and mutual funds, fetch their sector weightings.
     Returns {symbol: {sector_name: weight_0_to_1, ...}}
