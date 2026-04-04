@@ -70,7 +70,7 @@ async def import_positions(
     text = content.decode("utf-8")
 
     positions = parse_fidelity_positions(text)
-    positions = await enrich_positions_with_prices(positions)  # prices only — fast
+    positions = await enrich_positions_with_prices(positions, include_sectors=True)
 
     portfolio = get_or_create_portfolio(user_id)
     upsert_positions(portfolio["id"], user_id, positions)
@@ -78,10 +78,6 @@ async def import_positions(
     get_supabase().table("portfolios").update({
         "last_import_at": datetime.now(timezone.utc).isoformat(),
     }).eq("id", portfolio["id"]).execute()
-
-    # Fetch sectors in the background — takes ~30s, fills in after response returns
-    if background_tasks:
-        background_tasks.add_task(_backfill_sectors, portfolio["id"])
 
     health = calculate_health_score(positions)
 
