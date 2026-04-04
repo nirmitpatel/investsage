@@ -145,40 +145,98 @@ def fetch_sector_etf_performance(sectors: List[str], period: str = "3mo") -> Dic
     return result
 
 
+BOND_CATEGORY_KEYWORDS = [
+    'bond', 'fixed income', 'treasury', 'credit', 'inflation',
+    'cash', 'money market', 'ultra-short', 'mortgage', 'debt', 'municipal',
+]
+
+FUND_CATEGORY_TO_SECTOR = [
+    ('technology', 'Technology'),
+    ('science', 'Technology'),
+    ('health', 'Healthcare'),
+    ('biotech', 'Healthcare'),
+    ('pharma', 'Healthcare'),
+    ('financial', 'Financial Services'),
+    ('bank', 'Financial Services'),
+    ('energy', 'Energy'),
+    ('real estate', 'Real Estate'),
+    ('reit', 'Real Estate'),
+    ('utilities', 'Utilities'),
+    ('industrial', 'Industrials'),
+    ('communication', 'Communication Services'),
+    ('material', 'Basic Materials'),
+    ('natural resources', 'Basic Materials'),
+    ('climate', 'Energy'),
+]
+
+
+def _classify_fund_by_category(info: dict) -> Optional[Dict[str, float]]:
+    """Classify a fund into a sector based on its yfinance category + name when sector weightings aren't available."""
+    category = (info.get('category') or '').lower()
+    fund_name = (info.get('longName') or info.get('shortName') or '').lower()
+    text = f"{category} {fund_name}"
+
+    if any(kw in text for kw in BOND_CATEGORY_KEYWORDS):
+        return {'Fixed Income': 1.0}
+
+    for keyword, sector in FUND_CATEGORY_TO_SECTOR:
+        if keyword in text:
+            return {sector: 1.0}
+
+    return None
+
+
 def fetch_fund_sector_weightings(symbols: List[str]) -> Dict[str, Dict[str, float]]:
     """For ETFs and mutual funds, fetch their sector weightings.
     Returns {symbol: {sector_name: weight_0_to_1, ...}}
-    Only returns entries for symbols that actually have weightings data."""
+    Falls back to category-based classification when detailed weightings aren't available."""
     weightings: Dict[str, Dict[str, float]] = {}
     log.info(f"Fetching fund sector weightings for: {symbols}")
     for sym in symbols:
         try:
             ticker = yf.Ticker(sym)
-            fund_sectors = ticker.funds_data.sector_weightings if hasattr(ticker, 'funds_data') and ticker.funds_data is not None else None
-            if fund_sectors is None:
-                # Fallback: try info-level sector weightings
-                info = ticker.info
-                if info.get("quoteType") not in ("ETF", "MUTUALFUND"):
-                    continue
-                fund_sectors = info.get("sectorWeightings", [])
-                if isinstance(fund_sectors, list) and fund_sectors:
+            info = ticker.info
+            if info.get("quoteType") not in ("ETF", "MUTUALFUND"):
+                time.sleep(0.3)
+                continue
+
+            # Attempt 1: funds_data.sector_weightings (works for many ETFs)
+            fund_sectors = None
+            try:
+                if hasattr(ticker, 'funds_data') and ticker.funds_data is not None:
+                    fund_sectors = ticker.funds_data.sector_weightings
+            except Exception:
+                pass
+
+            # Attempt 2: info-level sectorWeightings
+            if not fund_sectors:
+                raw = info.get("sectorWeightings", [])
+                if isinstance(raw, list) and raw:
                     merged: Dict[str, float] = {}
-                    for entry in fund_sectors:
+                    for entry in raw:
                         merged.update(entry)
-                    fund_sectors = merged
-                else:
-                    continue
+                    fund_sectors = merged if merged else None
+
             if isinstance(fund_sectors, dict) and fund_sectors:
                 normalized = {
                     FUND_SECTOR_NAME_MAP.get(k, k.replace("_", " ").title()): float(v)
                     for k, v in fund_sectors.items()
-                    if float(v) > 0.01  # ignore < 1% noise
+                    if float(v) > 0.01
                 }
                 if normalized:
                     weightings[sym] = normalized
                     log.info(f"Fund weightings for {sym}: {normalized}")
-                else:
-                    log.warning(f"No weightings found for {sym}")
+                    time.sleep(0.3)
+                    continue
+
+            # Attempt 3: category/name-based classification
+            classified = _classify_fund_by_category(info)
+            if classified:
+                weightings[sym] = classified
+                log.info(f"Fund {sym} classified by category as: {classified}")
+            else:
+                log.warning(f"No weightings or category found for {sym}")
+
         except Exception as e:
             log.warning(f"Failed to fetch fund weightings for {sym}: {e}")
         time.sleep(0.3)

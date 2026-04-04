@@ -239,9 +239,20 @@ function SectorBreakdownPanel({ breakdown, period }: { breakdown: SectorBreakdow
 
         {/* Legend — grid for consistent column alignment */}
         <div className="flex-1 min-w-0">
-          <div className="grid gap-y-2.5" style={{ gridTemplateColumns: '10px 1fr auto auto', gap: '8px 12px' }}>
+          <div className="grid" style={{ gridTemplateColumns: '10px 1fr auto auto', columnGap: '12px', rowGap: '2px' }}>
+            {/* Column headers */}
+            <span />
+            <span className="text-[10px] text-gray-600 uppercase tracking-wider pb-2">Sector</span>
+            {hasTrends && period
+              ? <span className="text-[10px] text-gray-600 uppercase tracking-wider pb-2 text-right">{period}</span>
+              : <span />
+            }
+            <span className="text-[10px] text-gray-600 uppercase tracking-wider pb-2 text-right">Alloc.</span>
+
+            {/* Rows */}
             {ordered.map((item, i) => {
               const color = getSectorColor(item.sector, i < knownSectors.length ? i : -1)
+              const isOther = item.sector === 'Other'
               return (
                 <>
                   <span
@@ -249,15 +260,15 @@ function SectorBreakdownPanel({ breakdown, period }: { breakdown: SectorBreakdow
                     className="w-2.5 h-2.5 rounded-sm mt-0.5 shrink-0"
                     style={{ background: color }}
                   />
-                  <span key={`name-${item.sector}`} className={`text-sm truncate ${item.sector === 'Other' ? 'text-gray-600' : 'text-gray-300'}`}>
-                    {item.sector === 'Other' ? 'Other (funds)' : item.sector}
+                  <span key={`name-${item.sector}`} className={`text-sm truncate py-1 ${isOther ? 'text-gray-600' : 'text-gray-300'}`}>
+                    {isOther ? 'Other (funds)' : item.sector}
                   </span>
-                  <span key={`trend-${item.sector}`}>
-                    {item.market_trend != null && item.sector !== 'Other' ? (
-                      <TrendBadge pct={item.market_trend} />
-                    ) : null}
+                  <span key={`trend-${item.sector}`} className="py-1 flex items-center justify-end">
+                    {item.market_trend != null && !isOther
+                      ? <TrendBadge pct={item.market_trend} />
+                      : null}
                   </span>
-                  <span key={`pct-${item.sector}`} className={`text-sm font-semibold tabular-nums text-right ${item.sector === 'Other' ? 'text-gray-600' : 'text-white'}`}>
+                  <span key={`pct-${item.sector}`} className={`text-sm font-semibold tabular-nums text-right py-1 ${isOther ? 'text-gray-600' : 'text-white'}`}>
                     {item.pct}%
                   </span>
                 </>

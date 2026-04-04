@@ -38,8 +38,8 @@ def build_effective_sector_values(
     Build a sector → dollar_value map, expanding ETF/fund positions into
     their underlying sectors where data is available.
 
-    If unknown_as_other=True, funds without breakdown data are grouped under
-    "Other" so the total sums to 100% of portfolio value.
+    If unknown_as_other=True, funds without breakdown data AND stocks with
+    unknown sectors are grouped under "Other" so the total sums to 100%.
     """
     sector_values: Dict[str, float] = defaultdict(float)
     fund_weightings = fund_weightings or {}
@@ -55,6 +55,10 @@ def build_effective_sector_values(
                     sector_values[sec_name] += val * weight
             elif unknown_as_other:
                 sector_values["Other"] += val
+        elif sector == "Unknown":
+            if unknown_as_other:
+                sector_values["Other"] += val
+            # When not unknown_as_other, skip unknown stocks (same as unknown funds)
         else:
             sector_values[sector] += val
 
@@ -157,13 +161,13 @@ def calculate_health_score(
             })
 
     # ── Individual position sizing ────────────────────────────────────
-    # Skip funds without sector data — they're internally diversified
+    # Skip ALL ETFs and mutual funds — they are internally diversified instruments.
+    # Their sector contribution is already captured in the sector concentration analysis.
     for p in positions:
         sym = p["symbol"]
         sector = p.get("sector") or "Unknown"
 
-        # Funds without breakdown are internally diversified — skip concentration check
-        if sector in ("ETF", "Mutual Fund") and sym in unknown_fund_syms:
+        if sector in ("ETF", "Mutual Fund"):
             continue
 
         val = p.get("current_value") or 0
@@ -215,13 +219,13 @@ def calculate_health_score(
 
     score = max(0, min(100, 100 - deductions))
 
-    if score >= 85:
+    if score >= 90:
         grade = "A"
-    elif score >= 70:
+    elif score >= 75:
         grade = "B"
-    elif score >= 55:
+    elif score >= 60:
         grade = "C"
-    elif score >= 40:
+    elif score >= 45:
         grade = "D"
     else:
         grade = "F"
