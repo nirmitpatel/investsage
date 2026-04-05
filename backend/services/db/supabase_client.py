@@ -75,23 +75,26 @@ def get_tax_lots(user_id: str) -> List[Dict[str, Any]]:
     return result.data or []
 
 
-def save_tax_lots(user_id: str, position_rows: List[Dict[str, Any]], lots: List[Dict[str, Any]]) -> None:
-    """Match lots to their saved positions by symbol, then insert."""
+def replace_tax_lots(user_id: str, lots: List[Dict[str, Any]]) -> None:
+    """Delete existing lots for user and insert fresh set."""
     sb = get_supabase()
-    pos_by_symbol = {p["symbol"]: p["id"] for p in position_rows}
-    rows = []
-    for lot in lots:
-        position_id = pos_by_symbol.get(lot["symbol"])
-        if not position_id:
-            continue
-        rows.append({
-            "position_id": position_id,
+    sb.table("tax_lots").delete().eq("user_id", user_id).execute()
+    rows = [
+        {
             "user_id": user_id,
             "symbol": lot["symbol"],
             "shares": lot["shares"],
             "purchase_date": lot["purchase_date"],
             "purchase_price": lot["purchase_price"],
             "cost_basis": lot["cost_basis"],
-        })
+        }
+        for lot in lots
+        if lot.get("symbol") and lot.get("shares", 0) > 0
+    ]
     if rows:
         sb.table("tax_lots").insert(rows).execute()
+
+
+def save_tax_lots(user_id: str, position_rows: List[Dict[str, Any]], lots: List[Dict[str, Any]]) -> None:
+    """Legacy: Match lots to their saved positions by symbol, then insert."""
+    replace_tax_lots(user_id, lots)

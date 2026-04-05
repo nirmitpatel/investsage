@@ -21,7 +21,7 @@ from services.db.supabase_client import (
     get_or_create_portfolio,
     upsert_positions,
     get_positions,
-    save_tax_lots,
+    replace_tax_lots,
     update_portfolio_style,
 )
 from services.health_score import calculate_health_score
@@ -148,6 +148,8 @@ async def import_transactions(
 
     transactions = parse_fidelity_transactions(text)
     lots = reconstruct_tax_lots(transactions)
+
+    replace_tax_lots(user_id, lots)
 
     return {
         "imported": len(transactions),
