@@ -4,42 +4,74 @@ Uses structured prompts — Claude receives clean data, not raw financials.
 """
 
 import anthropic
+import json
+from typing import List, Dict, Any, Optional
 from config import settings
 
 client = anthropic.Anthropic(api_key=settings.ANTHROPIC_API_KEY)
-MODEL = "claude-opus-4-6"
+
+# Use Haiku for fast, cheap per-request summaries
+FAST_MODEL = "claude-haiku-4-5-20251001"
+# Use Sonnet for deeper analysis
+ANALYSIS_MODEL = "claude-sonnet-4-6"
 
 
 def explain_tax_opportunity(opportunity: dict) -> str:
     prompt = f"""You are a portfolio analyst explaining a tax-loss harvesting opportunity to an investor.
 
-Position: {opportunity['symbol']}
-Unrealized loss: ${abs(opportunity['unrealized_loss']):.2f}
-Estimated tax savings: ${opportunity['tax_savings']:.2f}
-Holding period: {"Short-term (taxed as income)" if opportunity['is_short_term'] else "Long-term (taxed at capital gains rate)"}
-Days until long-term transition: {opportunity.get('days_until_lt', 'N/A')}
+Position: {opportunity['symbol']} ({opportunity.get('sector', 'Unknown')})
+Unrealized loss: ${opportunity['unrealized_loss']:,.2f}
+Estimated tax savings: ${opportunity['tax_savings_estimate']:,.2f}
+Holding period: {opportunity['holding_period_label']} ({opportunity.get('days_held', '?')} days held)
+{"Days until long-term: " + str(opportunity['days_until_lt']) if opportunity.get('days_until_lt') else "Already long-term"}
+Suggested replacement: {opportunity['replacement_suggestion']}
 
-Write 2-3 sentences explaining why selling this position makes sense from a tax perspective. Be specific about the dollar savings. Plain English, no jargon."""
+Write 2-3 sentences explaining: (1) the tax benefit of harvesting this loss now, (2) whether they should wait for long-term treatment if close, (3) the replacement ETF to maintain exposure and avoid wash-sale rules. Be specific about dollar savings. Plain English, no jargon."""
 
     message = client.messages.create(
-        model=MODEL,
-        max_tokens=200,
+        model=FAST_MODEL,
+        max_tokens=250,
         messages=[{"role": "user", "content": prompt}],
     )
     return message.content[0].text
 
 
-def explain_health_issue(issue: dict) -> str:
-    prompt = f"""You are a portfolio analyst explaining a portfolio issue to an investor.
+def analyze_portfolio(
+    positions: List[Dict[str, Any]],
+    health: Dict[str, Any],
+    tax_summary: Optional[Dict[str, Any]] = None,
+) -> str:
+    """Generate a holistic plain-English portfolio summary using AI."""
+    style = health.get("investment_style") or "not set"
+    score = health.get("score", 0)
+    grade = health.get("grade", "N/A")
+    issues = health.get("issues", [])
+    sector_breakdown = health.get("sector_breakdown", [])
 
-Issue type: {issue['type']}
-Details: {issue['details']}
+    top_sectors = [f"{s['sector']} ({s['pct']}%)" for s in sector_breakdown[:4]]
+    issue_summaries = [i["message"][:120] for i in issues[:3]]
 
-Write 2-3 sentences explaining what this issue means for their portfolio and what they should consider doing. Plain English, no jargon."""
+    tax_line = ""
+    if tax_summary and tax_summary.get("opportunity_count", 0) > 0:
+        tax_line = f"\nTax opportunities: {tax_summary['opportunity_count']} positions with harvestable losses totaling ${tax_summary['total_harvestable_loss']:,.0f} (est. ${tax_summary['total_tax_savings_estimate']:,.0f} savings)"
+
+    prompt = f"""You are a portfolio analyst giving a brief, actionable summary to an investor.
+
+Portfolio snapshot:
+- Health score: {score}/100 (Grade {grade})
+- Investment style: {style}
+- Positions: {health.get('position_count', len(positions))}
+- Total value: ${health.get('total_value', 0):,.2f}
+- Total return: ${health.get('total_gain_loss', 0):+,.2f}
+- Top sectors: {', '.join(top_sectors) if top_sectors else 'N/A'}
+- Key issues: {'; '.join(issue_summaries) if issue_summaries else 'None'}
+{tax_line}
+
+Write a 3-4 sentence portfolio summary covering: (1) overall portfolio health in plain terms, (2) the biggest risk or strength, (3) one specific action to consider. Be direct and specific. No generic advice."""
 
     message = client.messages.create(
-        model=MODEL,
-        max_tokens=200,
+        model=ANALYSIS_MODEL,
+        max_tokens=350,
         messages=[{"role": "user", "content": prompt}],
     )
     return message.content[0].text
@@ -49,17 +81,15 @@ def generate_sell_hold_buy(position: dict, portfolio_context: dict) -> dict:
     prompt = f"""You are analyzing a stock position for an investor. Based on the data below, provide a Sell, Hold, or Buy More recommendation.
 
 Position: {position['symbol']}
-Current gain/loss: {position['total_gain_loss_percent']:.1f}%
-Current value: ${position['current_value']:.2f}
-Percent of portfolio: {position['percent_of_account']:.1f}%
+Current gain/loss: {position.get('total_gain_loss_percent', 0):.1f}%
+Current value: ${position.get('current_value', 0):,.2f}
+Percent of portfolio: {position.get('percent_of_account', 0) or 0:.1f}%
 Sector: {position.get('sector', 'Unknown')}
-30-day price trend: {position.get('trend_30d', {}).get('change_pct', 'N/A')}%
-90-day price trend: {position.get('trend_90d', {}).get('change_pct', 'N/A')}%
-Analyst recommendation: {position.get('recommendation', 'N/A')}
 
 Portfolio context:
-- Total portfolio value: ${portfolio_context.get('total_value', 0):.2f}
+- Total portfolio value: ${portfolio_context.get('total_value', 0):,.2f}
 - Number of positions: {portfolio_context.get('position_count', 0)}
+- Investment style: {portfolio_context.get('investment_style', 'not set')}
 
 Respond in this exact JSON format:
 {{
@@ -70,12 +100,11 @@ Respond in this exact JSON format:
 }}"""
 
     message = client.messages.create(
-        model=MODEL,
+        model=FAST_MODEL,
         max_tokens=400,
         messages=[{"role": "user", "content": prompt}],
     )
 
-    import json
     try:
         return json.loads(message.content[0].text)
     except json.JSONDecodeError:

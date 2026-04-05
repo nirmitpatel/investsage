@@ -69,6 +69,12 @@ def get_positions(portfolio_id: str) -> List[Dict[str, Any]]:
     return result.data or []
 
 
+def get_tax_lots(user_id: str) -> List[Dict[str, Any]]:
+    sb = get_supabase()
+    result = sb.table("tax_lots").select("*").eq("user_id", user_id).execute()
+    return result.data or []
+
+
 def save_tax_lots(user_id: str, position_rows: List[Dict[str, Any]], lots: List[Dict[str, Any]]) -> None:
     """Match lots to their saved positions by symbol, then insert."""
     sb = get_supabase()
