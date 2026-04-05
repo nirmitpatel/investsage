@@ -48,7 +48,8 @@ export default function LoginPage() {
     setError('')
     setLoading(true)
     const supabase = createClient()
-    const redirectTo = `${window.location.origin}/reset-password`
+    const basePath = process.env.NEXT_PUBLIC_BASE_PATH ?? ''
+    const redirectTo = `${window.location.origin}${basePath}/reset-password`
     const { error } = await supabase.auth.resetPasswordForEmail(email, { redirectTo })
     setLoading(false)
     if (error) {
