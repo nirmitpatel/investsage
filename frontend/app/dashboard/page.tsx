@@ -356,10 +356,13 @@ export default function Dashboard() {
   const [uploadMsg, setUploadMsg] = useState('')
   const [uploadError, setUploadError] = useState(false)
   const [loadingPortfolio, setLoadingPortfolio] = useState(true)
+  const [loadingError, setLoadingError] = useState(false)
   const [refreshing, setRefreshing] = useState(false)
   const [showImport, setShowImport] = useState(false)
   const [showStyleModal, setShowStyleModal] = useState(false)
   const [savingStyle, setSavingStyle] = useState(false)
+  const [recommendations, setRecommendations] = useState<Record<string, any>>({})
+  const [loadingRec, setLoadingRec] = useState<Record<string, boolean>>({})
 
   const positionsRef = useRef<HTMLInputElement>(null)
   const transactionsRef = useRef<HTMLInputElement>(null)
@@ -375,24 +378,48 @@ export default function Dashboard() {
 
   async function loadPortfolio() {
     setLoadingPortfolio(true)
+    setLoadingError(false)
     const token = await getToken()
     if (!token) { router.push('/login'); return }
 
-    const res = await fetch(`${API}/api/v1/portfolio`, {
-      headers: { Authorization: `Bearer ${token}` },
-    })
-    if (res.status === 401) { router.push('/login'); return }
-    if (res.ok) {
-      const data = await res.json()
-      setPortfolio(data.portfolio ?? null)
-      setPositions(data.positions ?? [])
-      setHealth(data.health ?? null)
-      // Show style modal if not yet set and they have positions
-      if (!data.portfolio?.investment_style && (data.positions?.length ?? 0) > 0) {
-        setShowStyleModal(true)
+    try {
+      const res = await fetch(`${API}/api/v1/portfolio`, {
+        headers: { Authorization: `Bearer ${token}` },
+      })
+      if (res.status === 401) { router.push('/login'); return }
+      if (res.ok) {
+        const data = await res.json()
+        setPortfolio(data.portfolio ?? null)
+        setPositions(data.positions ?? [])
+        setHealth(data.health ?? null)
+        if (!data.portfolio?.investment_style && (data.positions?.length ?? 0) > 0) {
+          setShowStyleModal(true)
+        }
+      } else {
+        setLoadingError(true)
       }
+    } catch {
+      setLoadingError(true)
     }
     setLoadingPortfolio(false)
+  }
+
+  async function handleGetRecommendation(symbol: string) {
+    if (recommendations[symbol]) return
+    setLoadingRec(r => ({ ...r, [symbol]: true }))
+    const token = await getToken()
+    if (!token) return
+    try {
+      const res = await fetch(`${API}/api/v1/ai/position/${symbol}/recommend`, {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${token}` },
+      })
+      if (res.ok) {
+        const data = await res.json()
+        setRecommendations(r => ({ ...r, [symbol]: data }))
+      }
+    } catch {}
+    setLoadingRec(r => ({ ...r, [symbol]: false }))
   }
 
   async function handleSelectStyle(style: InvestmentStyle) {
@@ -506,7 +533,7 @@ export default function Dashboard() {
           <NavItem icon={<GridIcon />} label="Portfolio" active />
           <NavItem icon={<LeafIcon />} label="Tax Savings" href="/tax" />
           <NavItem icon={<SparkleIcon />} label="AI Insights" href="/insights" />
-          <NavItem icon={<ChartIcon />} label="Analytics" soon />
+          <NavItem icon={<ChartIcon />} label="Analytics" href="/analytics" />
         </nav>
 
         {/* Sign out */}
@@ -716,6 +743,22 @@ export default function Dashboard() {
               </svg>
               <p className="text-gray-500 text-sm">Loading portfolio...</p>
             </div>
+          ) : loadingError ? (
+            <div className="bg-white/[0.03] border border-red-500/20 rounded-2xl p-12 text-center">
+              <div className="w-12 h-12 rounded-2xl bg-red-500/10 border border-red-500/20 flex items-center justify-center mx-auto mb-4">
+                <svg className="w-6 h-6 text-red-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.8}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+                </svg>
+              </div>
+              <p className="text-white font-semibold mb-1">Failed to load portfolio</p>
+              <p className="text-gray-500 text-sm mb-5">There was a problem connecting to the server.</p>
+              <button
+                onClick={loadPortfolio}
+                className="inline-flex items-center gap-2 bg-white/[0.06] hover:bg-white/[0.09] border border-white/[0.08] px-5 py-2.5 rounded-xl text-sm font-medium transition"
+              >
+                Try again
+              </button>
+            </div>
           ) : positions.length > 0 ? (
             <div className="bg-white/[0.03] border border-white/[0.08] rounded-2xl overflow-hidden">
               <div className="px-6 py-5 border-b border-white/[0.06]">
@@ -725,7 +768,7 @@ export default function Dashboard() {
                 <table className="w-full text-sm">
                   <thead>
                     <tr className="border-b border-white/[0.06]">
-                      {['Symbol', 'Sector', 'Shares', 'Price', 'Value', 'Cost Basis', 'Gain / Loss', '%'].map((h, i) => (
+                      {['Symbol', 'Sector', 'Shares', 'Price', 'Value', 'Cost Basis', 'Gain / Loss', '%', 'AI'].map((h, i) => (
                         <th key={h} className={`px-5 py-3.5 text-xs font-medium text-gray-500 uppercase tracking-wider ${i < 2 ? 'text-left' : 'text-right'}`}>{h}</th>
                       ))}
                     </tr>
@@ -766,6 +809,20 @@ export default function Dashboard() {
                               {p.total_gain_loss_percent >= 0 ? '+' : ''}{p.total_gain_loss_percent.toFixed(2)}%
                             </span>
                           ) : '—'}
+                        </td>
+                        <td className="px-5 py-4 text-right">
+                          {loadingRec[p.symbol] ? (
+                            <span className="inline-flex justify-center w-full"><Spinner /></span>
+                          ) : recommendations[p.symbol] ? (
+                            <RecBadge rec={recommendations[p.symbol]} />
+                          ) : (
+                            <button
+                              onClick={() => handleGetRecommendation(p.symbol)}
+                              className="text-xs text-gray-600 hover:text-violet-400 border border-white/[0.06] hover:border-violet-500/30 px-2.5 py-1 rounded-lg transition"
+                            >
+                              Ask AI
+                            </button>
+                          )}
                         </td>
                       </tr>
                     ))}
@@ -869,5 +926,26 @@ function ChartIcon() {
     <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.8}>
       <path strokeLinecap="round" strokeLinejoin="round" d="M7 12l3-3 3 3 4-4M8 21l4-4 4 4M3 4h18M4 4h16v12a1 1 0 01-1 1H5a1 1 0 01-1-1V4z" />
     </svg>
+  )
+}
+
+function RecBadge({ rec }: { rec: any }) {
+  const colors: Record<string, string> = {
+    BUY: 'bg-emerald-500/15 text-emerald-400 border-emerald-500/30',
+    SELL: 'bg-red-500/15 text-red-400 border-red-500/30',
+    HOLD: 'bg-yellow-500/15 text-yellow-400 border-yellow-500/30',
+  }
+  const color = colors[rec.recommendation] ?? 'bg-gray-500/15 text-gray-400 border-gray-500/30'
+  const tooltip = [rec.reasoning, rec.key_factors?.join(' · ')].filter(Boolean).join('\n')
+  return (
+    <span
+      title={tooltip}
+      className={`inline-flex items-center gap-1 text-xs font-semibold px-2.5 py-1 rounded-lg border cursor-help ${color}`}
+    >
+      {rec.recommendation}
+      {rec.confidence && (
+        <span className="opacity-60 font-normal">{rec.confidence[0].toUpperCase()}</span>
+      )}
+    </span>
   )
 }

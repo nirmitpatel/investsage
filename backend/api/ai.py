@@ -11,7 +11,7 @@ from services.market_data.yfinance_client import fetch_prices
 from services.health_score import calculate_health_score, build_effective_sector_values
 from services.market_data.yfinance_client import fetch_fund_sector_weightings, fetch_sector_etf_performance
 from services.tax_savings import find_tax_opportunities, summarize_tax_opportunities
-from services.ai.claude_client import analyze_portfolio
+from services.ai.claude_client import analyze_portfolio, generate_sell_hold_buy
 from api.portfolio import STYLE_TREND_PERIOD
 
 router = APIRouter()
@@ -58,4 +58,23 @@ def _build_analysis_sync(user_id: str) -> dict:
 async def analyze(user_id: str = Depends(get_current_user)):
     """Generate a holistic AI portfolio analysis."""
     result = await asyncio.to_thread(_build_analysis_sync, user_id)
+    return result
+
+
+@router.post("/position/{symbol}/recommend")
+async def recommend_position(symbol: str, user_id: str = Depends(get_current_user)):
+    """Get a Sell/Hold/Buy recommendation for a specific position."""
+    portfolio = get_or_create_portfolio(user_id)
+    positions = get_positions(portfolio["id"])
+    position = next((p for p in positions if p["symbol"] == symbol), None)
+    if not position:
+        raise HTTPException(status_code=404, detail=f"Position {symbol} not found")
+
+    total_value = sum(p.get("current_value") or 0 for p in positions)
+    portfolio_context = {
+        "total_value": total_value,
+        "position_count": len(positions),
+        "investment_style": portfolio.get("investment_style"),
+    }
+    result = await asyncio.to_thread(generate_sell_hold_buy, position, portfolio_context)
     return result
