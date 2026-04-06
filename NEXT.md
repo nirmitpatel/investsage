@@ -56,4 +56,4 @@ _Say "execute next" to run the top unchecked item. This file is updated after ev
 - [ ] **Rate limiting on AI endpoints** — `/analyze` and `/recommend` call Claude API; add per-user rate limits to control cost
 - [ ] **Backend error monitoring** — add Sentry (or similar) to Railway deployment for visibility into 500s
 - [ ] **`.env.local.example` audit** — ensure all required vars are documented for a clean local setup
-- [ ] **Tests & end-to-end coverage** — backend: pytest unit tests for `health_score.py`, `tax_savings.py`, and CSV parser edge cases; frontend: Playwright e2e tests covering import flow, style switch, Ask AI, and sector breakdown rendering; add GitHub Actions CI that runs both suites on every push to master to catch regressions before they reach prod
+- [x] **Tests & end-to-end coverage** — backend: pytest unit tests for `health_score.py`, `tax_savings.py`, and CSV parser edge cases; frontend: Playwright e2e tests covering import flow, style switch, Ask AI, and sector breakdown rendering; add GitHub Actions CI that runs both suites on every push to master to catch regressions before they reach prod
