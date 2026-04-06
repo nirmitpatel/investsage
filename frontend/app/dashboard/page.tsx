@@ -221,7 +221,7 @@ export default function Dashboard() {
         method: 'POST',
         headers: { Authorization: `Bearer ${token}` },
       })
-      if (res.ok) setRecommendations(r => ({ ...r, [symbol]: await res.json() }))
+      if (res.ok) { const data = await res.json(); setRecommendations(r => ({ ...r, [symbol]: data })) }
     } catch {}
     setLoadingRec(r => ({ ...r, [symbol]: false }))
   }

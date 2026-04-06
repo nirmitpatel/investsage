@@ -43,15 +43,19 @@ export default function InsightsPage() {
     const token = await getToken()
     if (!token) { router.push('/login'); return }
 
-    const res = await fetch(`${API}/api/v1/ai/analyze`, {
-      method: 'POST',
-      headers: { Authorization: `Bearer ${token}` },
-    })
-    if (res.status === 401) { router.push('/login'); return }
-    if (res.ok) {
-      setResult(await res.json())
-    } else {
-      setError('Analysis failed. Please try again.')
+    try {
+      const res = await fetch(`${API}/api/v1/ai/analyze`, {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${token}` },
+      })
+      if (res.status === 401) { router.push('/login'); return }
+      if (res.ok) {
+        setResult(await res.json())
+      } else {
+        setError('Analysis failed. Please try again.')
+      }
+    } catch {
+      setError('Could not connect to the server. Please try again.')
     }
     setLoading(false)
   }
@@ -74,7 +78,7 @@ export default function InsightsPage() {
 
         <div className="px-8 py-6 space-y-6 max-w-3xl">
           {/* Trigger */}
-          {!result && !loading && (
+          {!result && !loading && !error && (
             <div className="bg-white/[0.03] border border-white/[0.08] rounded-2xl p-10 text-center">
               <div className="w-14 h-14 rounded-2xl bg-violet-500/10 border border-violet-500/20 flex items-center justify-center mx-auto mb-4">
                 <SparkleIcon large />
@@ -89,7 +93,25 @@ export default function InsightsPage() {
               >
                 <SparkleIcon /> Analyze my portfolio
               </button>
-              {error && <p className="text-red-400 text-sm mt-4">{error}</p>}
+            </div>
+          )}
+
+          {/* Error retry card */}
+          {!result && !loading && error && (
+            <div className="bg-white/[0.03] border border-red-500/20 rounded-2xl p-12 text-center">
+              <div className="w-12 h-12 rounded-2xl bg-red-500/10 border border-red-500/20 flex items-center justify-center mx-auto mb-4">
+                <svg className="w-6 h-6 text-red-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.8}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+                </svg>
+              </div>
+              <p className="text-white font-semibold mb-1">Analysis failed</p>
+              <p className="text-gray-500 text-sm mb-5">{error}</p>
+              <button
+                onClick={handleAnalyze}
+                className="inline-flex items-center gap-2 bg-white/[0.06] hover:bg-white/[0.09] border border-white/[0.08] px-5 py-2.5 rounded-xl text-sm font-medium transition"
+              >
+                Try again
+              </button>
             </div>
           )}
 

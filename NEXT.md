@@ -1,28 +1,37 @@
 # InvestSage — Next Steps
 
-_I update this file at the end of each work session. Tell me to "do next" and I'll execute the top item._
+_Say "execute next" to run the top unchecked item. This file is updated after every completed or discovered task._
 
 ---
 
-## P0 — Must do before sharing widely
+## P0 — Blockers (must fix before sharing)
 
-- [ ] **Error/loading states on tax, insights, analytics pages** — currently they fail silently. Add retry cards like dashboard has.
-- [ ] **Verify Railway deployment** — confirm `POST /api/v1/ai/position/{symbol}/recommend` and `GET /api/v1/analytics` are live (added this session, Railway may need a manual redeploy).
+- [x] Error/loading states on tax, insights, analytics pages — retry cards matching dashboard
+- [x] Analytics page empty state — prompt to import when no positions
+- [ ] **Verify Railway deployment** — confirm `POST /api/v1/ai/position/{symbol}/recommend` and `GET /api/v1/analytics` are live; trigger manual redeploy if needed
 
 ---
 
 ## P1 — Polish & UX
 
-- [ ] **Mobile layout** — positions table overflows on phones. At minimum: horizontal scroll wrapper + responsive sidebar (hamburger or bottom nav).
-- [ ] **Session expiry handling** — if JWT expires mid-session, API calls return 401 silently. Should redirect to `/login` with a "session expired" message.
-- [ ] **Upload progress/feedback** — positions import takes ~30s (yfinance). The button text changes but there's no visual progress. A step indicator ("fetching prices… fetching sectors…") would reduce abandonment.
-- [ ] **Analytics page empty state** — if no positions imported, analytics shows nothing. Add a prompt to import first.
+- [ ] **Session expiry handling** — 401 mid-session should redirect to `/login` with "Session expired" message (currently silent across all pages)
+- [ ] **Mobile layout** — positions table overflows on phones; need horizontal scroll wrapper + responsive sidebar (hamburger or bottom nav)
+- [ ] **Upload progress indicator** — positions import takes ~30s; add step labels ("Fetching prices… Fetching sectors…") to reduce abandonment
+- [ ] **AI recommendation error state** — if `POST /recommend` fails in PositionsTable, button silently does nothing; show inline error
 
 ---
 
 ## P2 — Features
 
-- [ ] **Multi-brokerage support** — currently Fidelity CSV only. Schwab and Vanguard have different CSV formats.
-- [ ] **Portfolio comparison over time** — right now everything is point-in-time. Storing historical snapshots would enable a chart.
-- [ ] **Email notifications** — "your portfolio health changed" or "new tax opportunity found" weekly digest.
-- [ ] **Shareable portfolio report** — one-click PDF or shareable link for a snapshot of the dashboard.
+- [ ] **Multi-brokerage CSV support** — currently Fidelity only; add Schwab and Vanguard parsers (different column names/formats)
+- [ ] **Portfolio history snapshots** — store point-in-time snapshots to enable a value-over-time chart on analytics
+- [ ] **Email digest notifications** — weekly "your health score changed" or "new tax opportunity" email
+- [ ] **Shareable portfolio report** — one-click PDF or read-only shareable link for dashboard snapshot
+
+---
+
+## P3 — Hardening
+
+- [ ] **Rate limiting on AI endpoints** — `/analyze` and `/recommend` call Claude API; add per-user rate limits to control cost
+- [ ] **Backend error monitoring** — add Sentry (or similar) to Railway deployment for visibility into 500s
+- [ ] **`.env.local.example` audit** — ensure all required vars are documented for a clean local setup

@@ -58,6 +58,7 @@ export default function TaxPage() {
   const supabase = createClient()
 
   const [loading, setLoading] = useState(true)
+  const [loadingError, setLoadingError] = useState(false)
   const [hasLots, setHasLots] = useState(false)
   const [summary, setSummary] = useState<TaxSummary | null>(null)
   const [opportunities, setOpportunities] = useState<TaxOpportunity[]>([])
@@ -75,18 +76,25 @@ export default function TaxPage() {
 
   async function load() {
     setLoading(true)
+    setLoadingError(false)
     const token = await getToken()
     if (!token) { router.push('/login'); return }
 
-    const res = await fetch(`${API}/api/v1/tax/opportunities`, {
-      headers: { Authorization: `Bearer ${token}` },
-    })
-    if (res.status === 401) { router.push('/login'); return }
-    if (res.ok) {
-      const data = await res.json()
-      setHasLots(data.has_lots ?? false)
-      setSummary(data.summary ?? null)
-      setOpportunities(data.opportunities ?? [])
+    try {
+      const res = await fetch(`${API}/api/v1/tax/opportunities`, {
+        headers: { Authorization: `Bearer ${token}` },
+      })
+      if (res.status === 401) { router.push('/login'); return }
+      if (res.ok) {
+        const data = await res.json()
+        setHasLots(data.has_lots ?? false)
+        setSummary(data.summary ?? null)
+        setOpportunities(data.opportunities ?? [])
+      } else {
+        setLoadingError(true)
+      }
+    } catch {
+      setLoadingError(true)
     }
     setLoading(false)
   }
@@ -131,6 +139,21 @@ export default function TaxPage() {
                 <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z" />
               </svg>
               <p className="text-gray-500 text-sm">Analyzing tax lots...</p>
+            </div>
+          ) : loadingError ? (
+            <div className="bg-white/[0.03] border border-red-500/20 rounded-2xl p-12 text-center">
+              <div className="w-12 h-12 rounded-2xl bg-red-500/10 border border-red-500/20 flex items-center justify-center mx-auto mb-4">
+                <svg className="w-6 h-6 text-red-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.8}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+                </svg>
+              </div>
+              <p className="text-white font-semibold mb-1">Failed to load tax opportunities</p>
+              <p className="text-gray-500 text-sm mb-5">There was a problem connecting to the server.</p>
+              <button onClick={load}
+                className="inline-flex items-center gap-2 bg-white/[0.06] hover:bg-white/[0.09] border border-white/[0.08] px-5 py-2.5 rounded-xl text-sm font-medium transition"
+              >
+                Try again
+              </button>
             </div>
           ) : !hasLots ? (
             <NoLotsState />
