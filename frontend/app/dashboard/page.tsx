@@ -241,6 +241,7 @@ export default function Dashboard() {
       const data = await res.json()
       setPortfolio(p => p ? { ...p, investment_style: style } : null)
       setHealth(data.health ?? null)
+      setRecommendations({})
       setShowStyleModal(false)
     }
   }

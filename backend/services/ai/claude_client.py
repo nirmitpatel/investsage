@@ -105,12 +105,28 @@ Respond in this exact JSON format:
         messages=[{"role": "user", "content": prompt}],
     )
 
+    raw = message.content[0].text.strip()
+    # Strip markdown code fences if present
+    if raw.startswith("```"):
+        raw = raw.split("```")[1]
+        if raw.startswith("json"):
+            raw = raw[4:]
+        raw = raw.strip()
+
     try:
-        return json.loads(message.content[0].text)
+        return json.loads(raw)
     except json.JSONDecodeError:
+        # Try to salvage a recommendation keyword from the raw text
+        upper = raw.upper()
+        if "SELL" in upper:
+            rec = "SELL"
+        elif "BUY_MORE" in upper or "BUY MORE" in upper:
+            rec = "BUY_MORE"
+        else:
+            rec = "HOLD"
         return {
-            "recommendation": "HOLD",
+            "recommendation": rec,
             "confidence": "LOW",
-            "reasoning": message.content[0].text,
+            "reasoning": raw,
             "key_factors": [],
         }

@@ -60,6 +60,7 @@ export default function SectorBreakdownPanel({ breakdown, period }: { breakdown:
 
   const knownSectors = breakdown.filter(b => b.sector !== 'Other')
   const otherEntry = breakdown.find(b => b.sector === 'Other')
+  // Both donut and legend use this same ordered array so color indices always match
   const ordered = otherEntry ? [...knownSectors, otherEntry] : knownSectors
   const hasTrends = knownSectors.some(b => b.market_trend != null)
 
@@ -95,21 +96,21 @@ export default function SectorBreakdownPanel({ breakdown, period }: { breakdown:
               : <span />}
             <span className="text-[10px] text-gray-600 uppercase tracking-wider pb-2 text-right">Alloc.</span>
             {ordered.map((item, i) => {
-              const color = getSectorColor(item.sector, i < knownSectors.length ? i : -1)
+              const color = getSectorColor(item.sector, i)
               const isOther = item.sector === 'Other'
               return (
-                <>
-                  <span key={`dot-${item.sector}`} className="w-2.5 h-2.5 rounded-sm mt-0.5 shrink-0" style={{ background: color }} />
-                  <span key={`name-${item.sector}`} className={`text-sm truncate py-1 ${isOther ? 'text-gray-600' : 'text-gray-300'}`}>
+                <div key={item.sector} className="contents">
+                  <span className="w-2.5 h-2.5 rounded-sm mt-[7px] shrink-0 self-start" style={{ background: color }} />
+                  <span className={`text-sm truncate py-1 ${isOther ? 'text-gray-600' : 'text-gray-300'}`}>
                     {isOther ? 'Other (funds)' : item.sector}
                   </span>
-                  <span key={`trend-${item.sector}`} className="py-1 flex items-center justify-end">
+                  <span className="py-1 flex items-center justify-end">
                     {item.market_trend != null && !isOther ? <TrendBadge pct={item.market_trend} /> : null}
                   </span>
-                  <span key={`pct-${item.sector}`} className={`text-sm font-semibold tabular-nums text-right py-1 ${isOther ? 'text-gray-600' : 'text-white'}`}>
+                  <span className={`text-sm font-semibold tabular-nums text-right py-1 ${isOther ? 'text-gray-600' : 'text-white'}`}>
                     {item.pct}%
                   </span>
-                </>
+                </div>
               )
             })}
           </div>

@@ -1,5 +1,7 @@
 'use client'
 
+import { useState } from 'react'
+
 export interface Position {
   symbol: string
   description: string
@@ -38,21 +40,46 @@ function Spinner() {
 }
 
 function RecBadge({ rec }: { rec: any }) {
+  const [open, setOpen] = useState(false)
   const colors: Record<string, string> = {
-    BUY: 'bg-emerald-500/15 text-emerald-400 border-emerald-500/30',
+    BUY_MORE: 'bg-emerald-500/15 text-emerald-400 border-emerald-500/30',
     SELL: 'bg-red-500/15 text-red-400 border-red-500/30',
     HOLD: 'bg-yellow-500/15 text-yellow-400 border-yellow-500/30',
   }
+  const label: Record<string, string> = { BUY_MORE: 'BUY MORE', SELL: 'SELL', HOLD: 'HOLD' }
   const color = colors[rec.recommendation] ?? 'bg-gray-500/15 text-gray-400 border-gray-500/30'
-  const tooltip = [rec.reasoning, rec.key_factors?.join(' · ')].filter(Boolean).join('\n')
+
   return (
-    <span
-      title={tooltip}
-      className={`inline-flex items-center gap-1 text-xs font-semibold px-2.5 py-1 rounded-lg border cursor-help ${color}`}
-    >
-      {rec.recommendation}
-      {rec.confidence && <span className="opacity-60 font-normal">{rec.confidence[0].toUpperCase()}</span>}
-    </span>
+    <div className="relative inline-flex justify-end">
+      <button
+        onClick={() => setOpen(o => !o)}
+        className={`inline-flex items-center gap-1 text-xs font-semibold px-2.5 py-1 rounded-lg border cursor-pointer ${color}`}
+      >
+        {label[rec.recommendation] ?? rec.recommendation}
+        {rec.confidence && <span className="opacity-60 font-normal">{rec.confidence[0]}</span>}
+      </button>
+      {open && (
+        <>
+          <div className="fixed inset-0 z-10" onClick={() => setOpen(false)} />
+          <div className="absolute right-0 top-8 z-20 w-72 bg-[#13131f] border border-white/[0.10] rounded-xl shadow-2xl p-4 text-left">
+            <p className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-2">
+              {label[rec.recommendation] ?? rec.recommendation}
+              {rec.confidence && <span className="ml-1.5 normal-case font-normal text-gray-600">({rec.confidence.toLowerCase()} confidence)</span>}
+            </p>
+            {rec.reasoning && <p className="text-sm text-gray-300 leading-relaxed mb-3">{rec.reasoning}</p>}
+            {rec.key_factors?.length > 0 && (
+              <ul className="space-y-1">
+                {rec.key_factors.map((f: string, i: number) => (
+                  <li key={i} className="text-xs text-gray-500 flex gap-1.5">
+                    <span className="text-gray-700 mt-0.5">·</span>{f}
+                  </li>
+                ))}
+              </ul>
+            )}
+          </div>
+        </>
+      )}
+    </div>
   )
 }
 
