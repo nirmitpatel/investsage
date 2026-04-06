@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase'
+import Sidebar from '@/components/Sidebar'
 
 const API = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:8000'
 
@@ -113,32 +114,7 @@ export default function TaxPage() {
 
   return (
     <div className="min-h-screen bg-[#0a0a0f] text-white flex">
-      {/* Sidebar */}
-      <aside className="w-60 shrink-0 border-r border-white/[0.06] flex flex-col py-6 px-4">
-        <div className="flex items-center gap-2.5 px-2 mb-8">
-          <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-violet-500 to-violet-700 flex items-center justify-center shadow-md shadow-violet-500/30">
-            <svg className="w-4 h-4 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
-              <path strokeLinecap="round" strokeLinejoin="round" d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6" />
-            </svg>
-          </div>
-          <span className="font-bold text-lg tracking-tight">InvestSage</span>
-        </div>
-        <nav className="flex-1 space-y-1">
-          <NavItem icon={<GridIcon />} label="Portfolio" onClick={() => router.push('/dashboard')} />
-          <NavItem icon={<LeafIcon />} label="Tax Savings" active />
-          <NavItem icon={<SparkleIcon />} label="AI Insights" onClick={() => router.push('/insights')} />
-          <NavItem icon={<ChartIcon />} label="Analytics" onClick={() => router.push('/analytics')} />
-        </nav>
-        <button
-          onClick={handleSignOut}
-          className="flex items-center gap-2.5 px-3 py-2.5 rounded-xl text-gray-500 hover:text-gray-300 hover:bg-white/[0.04] text-sm transition"
-        >
-          <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.8}>
-            <path strokeLinecap="round" strokeLinejoin="round" d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a2 2 0 01-2 2H5a2 2 0 01-2-2V7a2 2 0 012-2h6a2 2 0 012 2v1" />
-          </svg>
-          Sign out
-        </button>
-      </aside>
+      <Sidebar active="tax" onSignOut={handleSignOut} />
 
       {/* Main */}
       <main className="flex-1 overflow-y-auto">
@@ -347,27 +323,6 @@ function AllGreenState() {
   )
 }
 
-function NavItem({ icon, label, active, onClick, soon }: { icon: React.ReactNode; label: string; active?: boolean; onClick?: () => void; soon?: boolean }) {
-  return (
-    <div
-      onClick={onClick}
-      className={`flex items-center gap-2.5 px-3 py-2.5 rounded-xl text-sm transition cursor-pointer
-        ${active ? 'bg-violet-600/15 text-violet-300 border border-violet-500/20' : 'text-gray-500 hover:text-gray-300 hover:bg-white/[0.04]'}`}
-    >
-      {icon}
-      <span className="flex-1">{label}</span>
-      {soon && <span className="text-[10px] bg-white/[0.07] text-gray-500 px-1.5 py-0.5 rounded-md">soon</span>}
-    </div>
-  )
-}
-
-function GridIcon() {
-  return (
-    <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.8}>
-      <path strokeLinecap="round" strokeLinejoin="round" d="M4 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2V6zm10 0a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2V6zM4 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2v-2zm10 0a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2v-2z" />
-    </svg>
-  )
-}
 
 function LeafIcon({ large }: { large?: boolean }) {
   return (
@@ -385,10 +340,3 @@ function SparkleIcon({ small }: { small?: boolean }) {
   )
 }
 
-function ChartIcon() {
-  return (
-    <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.8}>
-      <path strokeLinecap="round" strokeLinejoin="round" d="M7 12l3-3 3 3 4-4M8 21l4-4 4 4M3 4h18M4 4h16v12a1 1 0 01-1 1H5a1 1 0 01-1-1V4z" />
-    </svg>
-  )
-}
