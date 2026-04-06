@@ -24,6 +24,9 @@ Thumbs.db
 .vscode/
 .idea/
 
+# Claude Code local settings (machine-specific, not project config)
+.claude/
+
 # Uploads
 *.csv
 uploads/
