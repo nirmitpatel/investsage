@@ -13,6 +13,10 @@ _Say "execute next" to run the top unchecked item. This file is updated after ev
 - [x] **Fix Ask AI tooltip** — replace `title` attribute (shows raw JSON) with a proper popover showing reasoning + key factors
 - [x] **Clear stale recs on style change** — `handleSelectStyle` never calls `setRecommendations({})`; old Buy/Hold/Sell badges persist after mode switch
 - [x] **Fix sector donut color mismatch** — DonutChart renders `breakdown[]` order but legend renders `ordered[]` (Other moved to end); indices drift when Other is mid-array, causing dot/segment color mismatch
+- [ ] **Ask AI never recommends BUY** — the `/recommend` prompt only receives static snapshot data (gain %, value, sector) with no forward-looking signals; Claude has no basis to suggest buying more; enrich prompt with sector trend (from `market_trends`), whether position is underweight vs portfolio allocation, and investment style so it can reason about upside
+- [ ] **Rec popover: hover instead of click** — requires two separate clicks (Ask AI → open popover); switch to hover/focus-triggered display with a short delay so the reasoning appears on mouseover without an extra click
+- [ ] **Rec popover goes off-screen** — popover always opens downward; for positions near the bottom of the table it clips below the viewport; detect trigger position relative to viewport and flip upward when needed
+- [ ] **Ask AI for all positions button** — no way to bulk-fetch; add a "Ask AI for all" button in the Positions table header that fires `/recommend` for every position sequentially with a small delay between calls to avoid hammering the API
 
 ---
 
@@ -52,3 +56,4 @@ _Say "execute next" to run the top unchecked item. This file is updated after ev
 - [ ] **Rate limiting on AI endpoints** — `/analyze` and `/recommend` call Claude API; add per-user rate limits to control cost
 - [ ] **Backend error monitoring** — add Sentry (or similar) to Railway deployment for visibility into 500s
 - [ ] **`.env.local.example` audit** — ensure all required vars are documented for a clean local setup
+- [ ] **Tests & end-to-end coverage** — backend: pytest unit tests for `health_score.py`, `tax_savings.py`, and CSV parser edge cases; frontend: Playwright e2e tests covering import flow, style switch, Ask AI, and sector breakdown rendering; add GitHub Actions CI that runs both suites on every push to master to catch regressions before they reach prod
