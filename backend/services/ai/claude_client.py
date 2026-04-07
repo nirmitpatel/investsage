@@ -78,24 +78,52 @@ Write a 3-4 sentence portfolio summary covering: (1) overall portfolio health in
 
 
 def generate_sell_hold_buy(position: dict, portfolio_context: dict) -> dict:
+    sector = position.get('sector', 'Unknown')
+    gain_pct = position.get('total_gain_loss_percent', 0) or 0
+    pos_weight = position.get('percent_of_account', 0) or 0
+    n = portfolio_context.get('position_count', 1) or 1
+    avg_weight = round(100 / n, 1)
+    style = portfolio_context.get('investment_style', 'not set')
+    sector_trend = portfolio_context.get('sector_trend')
+    trend_period = portfolio_context.get('trend_period', '3-month')
+
+    sector_line = (
+        f"Sector {trend_period} trend: {sector_trend:+.1f}% (market benchmark for {sector})"
+        if sector_trend is not None
+        else f"Sector {trend_period} trend: unavailable"
+    )
+    weight_line = (
+        f"Position weight: {pos_weight:.1f}% of portfolio "
+        f"({'underweight' if pos_weight < avg_weight else 'overweight'} vs avg {avg_weight:.1f}% per position)"
+    )
+    vs_sector = ""
+    if sector_trend is not None:
+        diff = gain_pct - sector_trend
+        vs_sector = f"\nPosition vs sector: {'outperforming' if diff >= 0 else 'underperforming'} sector benchmark by {abs(diff):.1f}%"
+
     prompt = f"""You are analyzing a stock position for an investor. Based on the data below, provide a Sell, Hold, or Buy More recommendation.
 
 Position: {position['symbol']}
-Current gain/loss: {position.get('total_gain_loss_percent', 0):.1f}%
+Sector: {sector}
+Current gain/loss (all-time): {gain_pct:+.1f}%
 Current value: ${position.get('current_value', 0):,.2f}
-Percent of portfolio: {position.get('percent_of_account', 0) or 0:.1f}%
-Sector: {position.get('sector', 'Unknown')}
+{weight_line}
+{sector_line}{vs_sector}
 
 Portfolio context:
-- Total portfolio value: ${portfolio_context.get('total_value', 0):,.2f}
-- Number of positions: {portfolio_context.get('position_count', 0)}
-- Investment style: {portfolio_context.get('investment_style', 'not set')}
+- Total value: ${portfolio_context.get('total_value', 0):,.2f}
+- Positions: {n}
+- Investment style: {style}
+
+Use BUY_MORE when: sector is trending positively, position is underweight, and the stock is holding up well or outperforming its sector.
+Use SELL when: position is significantly underperforming its sector, or overweight in a declining sector.
+Use HOLD when: neither a clear buy nor sell signal.
 
 Respond in this exact JSON format:
 {{
   "recommendation": "SELL" | "HOLD" | "BUY_MORE",
   "confidence": "HIGH" | "MEDIUM" | "LOW",
-  "reasoning": "2-3 sentence plain English explanation",
+  "reasoning": "2-3 sentence plain English explanation referencing the sector trend and position weight",
   "key_factors": ["factor 1", "factor 2", "factor 3"]
 }}"""
 

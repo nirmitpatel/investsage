@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useRef, useState } from 'react'
 
 export interface Position {
   symbol: string
@@ -30,9 +30,10 @@ function gainBg(n: number | null) {
   return n >= 0 ? 'bg-emerald-500/10 text-emerald-400' : 'bg-red-500/10 text-red-400'
 }
 
-function Spinner() {
+function Spinner({ small }: { small?: boolean }) {
+  const cls = small ? 'h-3 w-3' : 'h-4 w-4'
   return (
-    <svg className="animate-spin h-4 w-4" viewBox="0 0 24 24" fill="none">
+    <svg className={`animate-spin ${cls}`} viewBox="0 0 24 24" fill="none">
       <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
       <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z" />
     </svg>
@@ -41,6 +42,10 @@ function Spinner() {
 
 function RecBadge({ rec }: { rec: any }) {
   const [open, setOpen] = useState(false)
+  const [flipUp, setFlipUp] = useState(false)
+  const btnRef = useRef<HTMLButtonElement>(null)
+  const timerRef = useRef<ReturnType<typeof setTimeout>>()
+
   const colors: Record<string, string> = {
     BUY_MORE: 'bg-emerald-500/15 text-emerald-400 border-emerald-500/30',
     SELL: 'bg-red-500/15 text-red-400 border-red-500/30',
@@ -49,35 +54,58 @@ function RecBadge({ rec }: { rec: any }) {
   const label: Record<string, string> = { BUY_MORE: 'BUY MORE', SELL: 'SELL', HOLD: 'HOLD' }
   const color = colors[rec.recommendation] ?? 'bg-gray-500/15 text-gray-400 border-gray-500/30'
 
+  function handleMouseEnter() {
+    timerRef.current = setTimeout(() => {
+      if (btnRef.current) {
+        const rect = btnRef.current.getBoundingClientRect()
+        // Flip upward if less than 220px below the button to bottom of viewport
+        setFlipUp(window.innerHeight - rect.bottom < 220)
+      }
+      setOpen(true)
+    }, 150)
+  }
+
+  function handleMouseLeave() {
+    clearTimeout(timerRef.current)
+    setOpen(false)
+  }
+
   return (
-    <div className="relative inline-flex justify-end">
+    <div className="relative inline-flex justify-end" onMouseLeave={handleMouseLeave}>
       <button
-        onClick={() => setOpen(o => !o)}
-        className={`inline-flex items-center gap-1 text-xs font-semibold px-2.5 py-1 rounded-lg border cursor-pointer ${color}`}
+        ref={btnRef}
+        onMouseEnter={handleMouseEnter}
+        className={`inline-flex items-center gap-1 text-xs font-semibold px-2.5 py-1 rounded-lg border cursor-default ${color}`}
       >
         {label[rec.recommendation] ?? rec.recommendation}
         {rec.confidence && <span className="opacity-60 font-normal">{rec.confidence[0]}</span>}
       </button>
       {open && (
-        <>
-          <div className="fixed inset-0 z-10" onClick={() => setOpen(false)} />
-          <div className="absolute right-0 top-8 z-20 w-72 bg-[#13131f] border border-white/[0.10] rounded-xl shadow-2xl p-4 text-left">
-            <p className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-2">
-              {label[rec.recommendation] ?? rec.recommendation}
-              {rec.confidence && <span className="ml-1.5 normal-case font-normal text-gray-600">({rec.confidence.toLowerCase()} confidence)</span>}
-            </p>
-            {rec.reasoning && <p className="text-sm text-gray-300 leading-relaxed mb-3">{rec.reasoning}</p>}
-            {rec.key_factors?.length > 0 && (
-              <ul className="space-y-1">
-                {rec.key_factors.map((f: string, i: number) => (
-                  <li key={i} className="text-xs text-gray-500 flex gap-1.5">
-                    <span className="text-gray-700 mt-0.5">·</span>{f}
-                  </li>
-                ))}
-              </ul>
+        <div
+          className={`absolute right-0 z-20 w-72 bg-[#13131f] border border-white/[0.10] rounded-xl shadow-2xl p-4 text-left ${flipUp ? 'bottom-8' : 'top-8'}`}
+          onMouseEnter={() => clearTimeout(timerRef.current)}
+        >
+          <p className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-2">
+            {label[rec.recommendation] ?? rec.recommendation}
+            {rec.confidence && (
+              <span className="ml-1.5 normal-case font-normal text-gray-600">
+                ({rec.confidence.toLowerCase()} confidence)
+              </span>
             )}
-          </div>
-        </>
+          </p>
+          {rec.reasoning && (
+            <p className="text-sm text-gray-300 leading-relaxed mb-3">{rec.reasoning}</p>
+          )}
+          {rec.key_factors?.length > 0 && (
+            <ul className="space-y-1">
+              {rec.key_factors.map((f: string, i: number) => (
+                <li key={i} className="text-xs text-gray-500 flex gap-1.5">
+                  <span className="text-gray-700 mt-0.5">·</span>{f}
+                </li>
+              ))}
+            </ul>
+          )}
+        </div>
       )}
     </div>
   )
@@ -92,6 +120,8 @@ interface Props {
 }
 
 export default function PositionsTable({ positions, loadingRec, recommendations, onGetRecommendation, onImportClick }: Props) {
+  const [loadingAll, setLoadingAll] = useState(false)
+
   if (positions.length === 0) {
     return (
       <div className="bg-white/[0.03] border border-white/[0.08] rounded-2xl p-16 text-center">
@@ -115,10 +145,42 @@ export default function PositionsTable({ positions, loadingRec, recommendations,
     )
   }
 
+  const pending = positions.filter(p => !recommendations[p.symbol] && !loadingRec[p.symbol])
+  const doneCount = positions.filter(p => recommendations[p.symbol]).length
+
+  async function handleAskAll() {
+    setLoadingAll(true)
+    for (const p of pending) {
+      onGetRecommendation(p.symbol)
+      // Small delay so we don't fire 51 requests simultaneously
+      await new Promise(r => setTimeout(r, 350))
+    }
+    setLoadingAll(false)
+  }
+
   return (
     <div className="bg-white/[0.03] border border-white/[0.08] rounded-2xl overflow-hidden">
-      <div className="px-6 py-5 border-b border-white/[0.06]">
+      <div className="px-6 py-5 border-b border-white/[0.06] flex items-center justify-between">
         <h2 className="font-semibold">Positions</h2>
+        {positions.length > 0 && (
+          <div className="flex items-center gap-3">
+            {doneCount > 0 && (
+              <span className="text-xs text-gray-600">{doneCount}/{positions.length} analyzed</span>
+            )}
+            <button
+              onClick={handleAskAll}
+              disabled={loadingAll || pending.length === 0}
+              className="flex items-center gap-1.5 text-xs text-gray-400 hover:text-violet-400 border border-white/[0.08] hover:border-violet-500/30 px-3 py-1.5 rounded-lg transition disabled:opacity-40 disabled:cursor-not-allowed"
+            >
+              {loadingAll ? <Spinner small /> : (
+                <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z" />
+                </svg>
+              )}
+              {loadingAll ? 'Analyzing…' : pending.length === 0 ? 'All analyzed' : `Ask AI for all`}
+            </button>
+          </div>
+        )}
       </div>
       <div className="overflow-x-auto">
         <table className="w-full text-sm">

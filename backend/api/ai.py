@@ -51,20 +51,42 @@ async def analyze(user_id: str = Depends(get_current_user)):
     return result
 
 
+def _recommend_sync(symbol: str, portfolio: dict, positions: list) -> dict:
+    position = next((p for p in positions if p["symbol"] == symbol), None)
+    if not position:
+        return {}
+
+    total_value = sum(p.get("current_value") or 0 for p in positions)
+    investment_style = portfolio.get("investment_style")
+    period = STYLE_TREND_PERIOD.get(investment_style, "3mo")
+
+    # Fetch sector trend for this position's sector
+    sector = position.get("sector") or "Unknown"
+    sector_trend = None
+    if sector not in ("ETF", "Mutual Fund", "Unknown"):
+        trends = fetch_sector_etf_performance([sector], period=period)
+        sector_trend = trends.get(sector)
+
+    trend_period_label = {
+        "1y": "1-year", "3mo": "3-month", "2y": "2-year"
+    }.get(period, period)
+
+    portfolio_context = {
+        "total_value": total_value,
+        "position_count": len(positions),
+        "investment_style": investment_style,
+        "sector_trend": sector_trend,
+        "trend_period": trend_period_label,
+    }
+    return generate_sell_hold_buy(position, portfolio_context)
+
+
 @router.post("/position/{symbol}/recommend")
 async def recommend_position(symbol: str, user_id: str = Depends(get_current_user)):
     """Get a Sell/Hold/Buy recommendation for a specific position."""
     portfolio = get_or_create_portfolio(user_id)
     positions = get_positions(portfolio["id"])
-    position = next((p for p in positions if p["symbol"] == symbol), None)
-    if not position:
+    if not any(p["symbol"] == symbol for p in positions):
         raise HTTPException(status_code=404, detail=f"Position {symbol} not found")
-
-    total_value = sum(p.get("current_value") or 0 for p in positions)
-    portfolio_context = {
-        "total_value": total_value,
-        "position_count": len(positions),
-        "investment_style": portfolio.get("investment_style"),
-    }
-    result = await asyncio.to_thread(generate_sell_hold_buy, position, portfolio_context)
+    result = await asyncio.to_thread(_recommend_sync, symbol, portfolio, positions)
     return result
