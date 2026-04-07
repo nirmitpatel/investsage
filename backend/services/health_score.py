@@ -23,9 +23,9 @@ STYLE_REBALANCE_TIP = {
 }
 
 STYLE_TREND_PERIOD = {
-    "play_it_safe": ("1y", "1-year"),
+    "play_it_safe": ("3y", "3-year"),
     "beat_the_market": ("3mo", "3-month"),
-    "long_game": ("2y", "2-year"),
+    "long_game": ("10y", "10-year"),
 }
 
 

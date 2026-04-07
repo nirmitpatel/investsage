@@ -39,9 +39,9 @@ interface Health {
 }
 
 const STYLE_CONFIG = {
-  play_it_safe: { label: 'Play it safe', emoji: '🛡️', desc: 'Conservative — capital preservation, low volatility', color: 'text-blue-300', bg: 'bg-blue-500/10 border-blue-500/30' },
+  play_it_safe: { label: 'Play it safe', emoji: '🛡️', desc: 'Conservative — capital preservation, 3-year stability focus', color: 'text-blue-300', bg: 'bg-blue-500/10 border-blue-500/30' },
   beat_the_market: { label: 'Beat the market', emoji: '⚡', desc: 'Aggressive — outperform the S&P 500', color: 'text-violet-300', bg: 'bg-violet-500/10 border-violet-500/30' },
-  long_game: { label: 'Long game', emoji: '🌱', desc: 'Patient — decades-long compounding', color: 'text-emerald-300', bg: 'bg-emerald-500/10 border-emerald-500/30' },
+  long_game: { label: 'Long game', emoji: '🌱', desc: 'Patient — 10-year horizon, decades-long compounding', color: 'text-emerald-300', bg: 'bg-emerald-500/10 border-emerald-500/30' },
 }
 
 function fmt(n: number | null, prefix = '') {

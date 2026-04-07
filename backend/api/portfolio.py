@@ -31,9 +31,9 @@ router = APIRouter()
 VALID_STYLES = {"play_it_safe", "beat_the_market", "long_game"}
 
 STYLE_TREND_PERIOD = {
-    "play_it_safe": "1y",
+    "play_it_safe": "3y",
     "beat_the_market": "3mo",
-    "long_game": "2y",
+    "long_game": "10y",
 }
 
 

@@ -198,7 +198,7 @@ class TestCalculateHealthScore:
 
     def test_long_game_trend_period(self):
         result = calculate_health_score([], investment_style="long_game")
-        assert result["market_trends_period"] == "2-year"
+        assert result["market_trends_period"] == "10-year"
 
     def test_unknown_fund_produces_note(self, make_position):
         positions = [make_position("MYFUND", 2000, "Mutual Fund")]

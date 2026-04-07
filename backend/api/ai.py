@@ -68,7 +68,7 @@ def _recommend_sync(symbol: str, portfolio: dict, positions: list) -> dict:
         sector_trend = trends.get(sector)
 
     trend_period_label = {
-        "1y": "1-year", "3mo": "3-month", "2y": "2-year"
+        "3y": "3-year", "3mo": "3-month", "10y": "10-year"
     }.get(period, period)
 
     portfolio_context = {
