@@ -89,7 +89,7 @@ def fetch_sectors(symbols: List[str]) -> Dict[str, str]:
                     elif quote_type == "MUTUALFUND":
                         sector = "Mutual Fund"
                 if sector:
-                    sectors[sym] = sector
+                    sectors[sym] = SECTOR_NAME_NORMALIZE.get(sector, sector)
             except Exception:
                 pass
         if i + BATCH_SIZE < len(symbols):
@@ -99,6 +99,18 @@ def fetch_sectors(symbols: List[str]) -> Dict[str, str]:
 
 log = logging.getLogger(__name__)
 
+
+# Normalize yfinance sector names to canonical names used throughout the app
+SECTOR_NAME_NORMALIZE: Dict[str, str] = {
+    "Health Care": "Healthcare",
+    "Financial Services": "Financial Services",
+    "Consumer Discretionary": "Consumer Cyclical",
+    "Consumer Staples": "Consumer Defensive",
+    "Materials": "Basic Materials",
+    "Real Estate": "Real Estate",
+    "Communication Services": "Communication Services",
+    "Information Technology": "Technology",
+}
 
 SECTOR_ETFS: Dict[str, str] = {
     "Technology": "XLK",
