@@ -233,7 +233,7 @@ function EmailField({ value, onChange }: { value: string; onChange: (v: string) 
         value={value}
         onChange={(e) => onChange(e.target.value)}
         required
-        placeholder="you@example.com"
+        placeholder="Email address"
         className="w-full bg-white/[0.05] border border-white/[0.1] rounded-xl px-4 py-3 text-white placeholder-gray-600 text-sm focus:outline-none focus:border-violet-500 focus:bg-white/[0.07] transition"
       />
     </div>
@@ -249,7 +249,7 @@ function PasswordField({ value, onChange, hint }: { value: string; onChange: (v:
         value={value}
         onChange={(e) => onChange(e.target.value)}
         required
-        placeholder="••••••••"
+        placeholder="Password"
         className="w-full bg-white/[0.05] border border-white/[0.1] rounded-xl px-4 py-3 text-white placeholder-gray-600 text-sm focus:outline-none focus:border-violet-500 focus:bg-white/[0.07] transition"
       />
       {hint && <p className="text-xs text-gray-600 mt-1">{hint}</p>}

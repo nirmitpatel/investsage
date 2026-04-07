@@ -42,7 +42,7 @@ function Spinner({ small }: { small?: boolean }) {
 
 function RecBadge({ rec }: { rec: any }) {
   const [open, setOpen] = useState(false)
-  const [flipUp, setFlipUp] = useState(false)
+  const [popoverStyle, setPopoverStyle] = useState<React.CSSProperties>({})
   const btnRef = useRef<HTMLButtonElement>(null)
   const timerRef = useRef<ReturnType<typeof setTimeout>>()
 
@@ -58,8 +58,14 @@ function RecBadge({ rec }: { rec: any }) {
     timerRef.current = setTimeout(() => {
       if (btnRef.current) {
         const rect = btnRef.current.getBoundingClientRect()
-        // Flip upward if less than 220px below the button to bottom of viewport
-        setFlipUp(window.innerHeight - rect.bottom < 220)
+        const POPOVER_HEIGHT = 240
+        const spaceBelow = window.innerHeight - rect.bottom
+        const right = Math.max(8, window.innerWidth - rect.right)
+        if (spaceBelow < POPOVER_HEIGHT) {
+          setPopoverStyle({ position: 'fixed', bottom: window.innerHeight - rect.top + 4, right })
+        } else {
+          setPopoverStyle({ position: 'fixed', top: rect.bottom + 4, right })
+        }
       }
       setOpen(true)
     }, 150)
@@ -71,7 +77,7 @@ function RecBadge({ rec }: { rec: any }) {
   }
 
   return (
-    <div className="relative inline-flex justify-end" onMouseLeave={handleMouseLeave}>
+    <div className="inline-flex justify-end" onMouseLeave={handleMouseLeave}>
       <button
         ref={btnRef}
         onMouseEnter={handleMouseEnter}
@@ -82,8 +88,10 @@ function RecBadge({ rec }: { rec: any }) {
       </button>
       {open && (
         <div
-          className={`absolute right-0 z-20 w-72 bg-[#13131f] border border-white/[0.10] rounded-xl shadow-2xl p-4 text-left ${flipUp ? 'bottom-8' : 'top-8'}`}
+          style={popoverStyle}
+          className="z-50 w-72 bg-[#13131f] border border-white/[0.10] rounded-xl shadow-2xl p-4 text-left"
           onMouseEnter={() => clearTimeout(timerRef.current)}
+          onMouseLeave={handleMouseLeave}
         >
           <p className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-2">
             {label[rec.recommendation] ?? rec.recommendation}

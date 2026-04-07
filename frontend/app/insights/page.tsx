@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase'
 import Sidebar from '@/components/Sidebar'
@@ -31,6 +31,15 @@ export default function InsightsPage() {
   const [loading, setLoading] = useState(false)
   const [result, setResult] = useState<AnalysisResult | null>(null)
   const [error, setError] = useState('')
+  const mountedRef = useRef(false)
+
+  useEffect(() => {
+    if (mountedRef.current) return
+    mountedRef.current = true
+    supabase.auth.getSession().then(({ data }) => {
+      if (!data.session) router.push('/login')
+    })
+  }, [])
 
   async function getToken() {
     const { data } = await supabase.auth.getSession()
@@ -78,7 +87,7 @@ export default function InsightsPage() {
 
         <div className="px-8 py-6 space-y-6 max-w-3xl">
           {/* Trigger */}
-          {!result && !loading && !error && (
+          {!result && !error && (
             <div className="bg-white/[0.03] border border-white/[0.08] rounded-2xl p-10 text-center">
               <div className="w-14 h-14 rounded-2xl bg-violet-500/10 border border-violet-500/20 flex items-center justify-center mx-auto mb-4">
                 <SparkleIcon large />
@@ -89,10 +98,24 @@ export default function InsightsPage() {
               </p>
               <button
                 onClick={handleAnalyze}
-                className="inline-flex items-center gap-2 bg-violet-600 hover:bg-violet-500 px-6 py-3 rounded-xl text-sm font-semibold transition shadow-lg shadow-violet-500/20"
+                disabled={loading}
+                className="inline-flex items-center gap-2 bg-violet-600 hover:bg-violet-500 disabled:opacity-60 px-6 py-3 rounded-xl text-sm font-semibold transition shadow-lg shadow-violet-500/20"
               >
-                <SparkleIcon /> Analyze my portfolio
+                {loading ? (
+                  <>
+                    <svg className="animate-spin h-4 w-4" viewBox="0 0 24 24" fill="none">
+                      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z" />
+                    </svg>
+                    Analyzing...
+                  </>
+                ) : (
+                  <><SparkleIcon /> Analyze my portfolio</>
+                )}
               </button>
+              {loading && (
+                <p className="text-gray-600 text-xs mt-4">This takes ~15 seconds</p>
+              )}
             </div>
           )}
 
@@ -112,17 +135,6 @@ export default function InsightsPage() {
               >
                 Try again
               </button>
-            </div>
-          )}
-
-          {loading && (
-            <div className="bg-white/[0.03] border border-white/[0.08] rounded-2xl p-16 text-center">
-              <svg className="animate-spin h-6 w-6 text-violet-400 mx-auto mb-3" viewBox="0 0 24 24" fill="none">
-                <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-                <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z" />
-              </svg>
-              <p className="text-gray-400 text-sm">Claude is analyzing your portfolio...</p>
-              <p className="text-gray-600 text-xs mt-1">This takes ~15 seconds</p>
             </div>
           )}
 

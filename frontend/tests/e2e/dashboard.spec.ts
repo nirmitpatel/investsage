@@ -1,6 +1,7 @@
 import { test, expect } from '@playwright/test'
 import {
   mockSupabaseAuth, mockPortfolioAPI, mockRefreshPricesAPI, mockStylePatchAPI,
+  mockRecommendAPI,
   MOCK_HEALTH, MOCK_POSITIONS,
 } from './fixtures/api-mocks'
 
@@ -110,28 +111,68 @@ test.describe('Dashboard', () => {
 
   test('AI recommendation popover shows on hover after Ask AI clicked', async ({ page }) => {
     await mockPortfolioAPI(page)
-    await page.route('**/api/v1/ai/position/AAPL/recommend', route => {
-      route.fulfill({
-        status: 200,
-        contentType: 'application/json',
-        body: JSON.stringify({
-          recommendation: 'HOLD',
-          confidence: 'MEDIUM',
-          reasoning: 'Stock is performing well but already a large position.',
-          key_factors: ['25% gain', '60% of portfolio'],
-        }),
-      })
+    await mockRecommendAPI(page, 'AAPL')
+    await page.goto('/dashboard')
+
+    // Click Ask AI for AAPL — badge should appear
+    await page.getByRole('button', { name: /ask ai/i }).first().click()
+    const badge = page.getByRole('button', { name: /hold/i }).first()
+    await expect(badge).toBeVisible()
+
+    // Hover the badge — popover opens after 150 ms delay
+    await badge.hover()
+    await expect(page.getByText('Stock is performing well but already a large position.')).toBeVisible()
+  })
+
+  test('AI recommendation popover stays within viewport', async ({ page }) => {
+    // Use a small viewport so the last row is near the bottom edge
+    await page.setViewportSize({ width: 1280, height: 500 })
+    await mockPortfolioAPI(page)
+    await mockRecommendAPI(page, 'AAPL')
+    await mockRecommendAPI(page, 'JNJ')
+    await page.goto('/dashboard')
+
+    // Trigger both recommendations so both badges render
+    for (const btn of await page.getByRole('button', { name: /ask ai/i }).all()) {
+      await btn.click()
+    }
+    // Wait for both badges
+    await expect(page.getByRole('button', { name: /hold/i }).first()).toBeVisible()
+
+    // Scroll to the bottom so the last badge is near the viewport edge
+    await page.evaluate(() => window.scrollTo(0, document.body.scrollHeight))
+
+    // Hover the last badge — popover must not overflow below the viewport
+    const badges = page.getByRole('button', { name: /hold/i })
+    const lastBadge = badges.last()
+    await lastBadge.hover()
+    const popover = page.locator('.bg-\\[\\#13131f\\]').last()
+    await expect(popover).toBeVisible()
+
+    const box = await popover.boundingBox()
+    expect(box).not.toBeNull()
+    // Popover bottom must be within viewport (position:fixed escapes overflow containers)
+    expect(box!.y + box!.height).toBeLessThanOrEqual(500 + 2) // 2px tolerance
+  })
+
+  test('AI recommendation popover shows reasoning when sector trend is unavailable', async ({ page }) => {
+    await mockPortfolioAPI(page)
+    await mockRecommendAPI(page, 'AAPL', {
+      recommendation: 'HOLD',
+      confidence: 'LOW',
+      reasoning: 'No sector trend data available to confirm momentum.',
+      key_factors: ['sector trend unavailable', 'position is underweight'],
     })
     await page.goto('/dashboard')
 
-    // Click Ask AI for AAPL
     await page.getByRole('button', { name: /ask ai/i }).first().click()
-    // Badge appears
-    await expect(page.getByText('HOLD')).toBeVisible()
+    const badge = page.getByRole('button', { name: /hold/i }).first()
+    await expect(badge).toBeVisible()
 
-    // Click badge to open popover
-    await page.getByText('HOLD').click()
-    await expect(page.getByText('Stock is performing well but already a large position.')).toBeVisible()
+    await badge.hover()
+    // Reasoning must render even without sector data — not a blank or broken popover
+    await expect(page.getByText('No sector trend data available to confirm momentum.')).toBeVisible()
+    await expect(page.getByText('sector trend unavailable')).toBeVisible()
   })
 
   test('upload positions CSV shows success message', async ({ page }) => {

@@ -61,8 +61,30 @@ export const MOCK_AI_ANALYZE_RESPONSE = {
 
 // ── Route interceptors ─────────────────────────────────────────────────────
 
-/** Mock Supabase auth to return a valid session — prevents redirect to /login */
+/** Mock Supabase auth to return a valid session — prevents redirect to /login.
+ *
+ * @supabase/auth-helpers-nextjs stores the session in the 'supabase.auth.token'
+ * cookie (read via document.cookie, not a network call), so route mocking alone
+ * is insufficient.  We set the cookie directly, then also intercept any
+ * refresh/validation network calls just in case.
+ */
 export async function mockSupabaseAuth(page: Page) {
+  const expiresAt = Math.floor(Date.now() / 1000) + 3600
+  const session = JSON.stringify({
+    access_token: 'fake-access-token',
+    refresh_token: 'fake-refresh-token',
+    token_type: 'bearer',
+    expires_in: 3600,
+    expires_at: expiresAt,
+    user: { id: 'user-1', email: 'test@example.com' },
+  })
+  await page.context().addCookies([{
+    name: 'supabase.auth.token',
+    value: session,
+    domain: 'localhost',
+    path: '/',
+  }])
+  // Also mock network auth calls (e.g. token refresh if expires_at is near)
   await page.route('**/auth/v1/**', route => {
     route.fulfill({
       status: 200,
@@ -134,6 +156,25 @@ export async function mockAIAnalyzeAPI(page: Page, delay = 0) {
       status: 200,
       contentType: 'application/json',
       body: JSON.stringify(MOCK_AI_ANALYZE_RESPONSE),
+    })
+  })
+}
+
+export async function mockRecommendAPI(
+  page: Page,
+  symbol: string,
+  payload: object = {
+    recommendation: 'HOLD',
+    confidence: 'MEDIUM',
+    reasoning: 'Stock is performing well but already a large position.',
+    key_factors: ['25% gain', '60% of portfolio'],
+  },
+) {
+  await page.route(`**/api/v1/ai/position/${symbol}/recommend`, route => {
+    route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify(payload),
     })
   })
 }
