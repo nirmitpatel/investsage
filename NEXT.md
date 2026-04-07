@@ -53,6 +53,11 @@ _Say "execute next" to run the top unchecked item. This file is updated after ev
 
 ## P3 — Hardening
 
+- [x] **Fix price refresh scope** — `price_refresh.py:33` selects all positions with no user filter; background loop updates everyone's prices (fine), but the manual `/refresh-prices` endpoint calls the same function and returns only the requesting user's positions — scope the sync function to accept an optional `user_id` so the endpoint only rewrites that user's rows
+- [x] **CSV upload size limit** — `portfolio.py:116` reads the entire file into memory before validation; reject files over 5MB with a 413 before calling `file.read()`
+- [x] **Deduplicate `get_current_user()`** — identical function copy-pasted into `portfolio.py`, `tax.py`, `ai.py`, `analytics.py`; extract to `backend/dependencies.py` and import from there
+- [ ] **Persist AI recommendations to `recommendation_snapshots`** — table and schema already defined; write a row on every `/recommend` call so users can see recommendation history and track whether following advice paid off
+- [ ] **Drop unused schema tables** — `smart_money_trades` and `policy_events` were never built; remove from `schema.sql` and add a `DROP TABLE IF EXISTS` migration comment for anyone who applied the schema already
 - [ ] **Rate limiting on AI endpoints** — `/analyze` and `/recommend` call Claude API; add per-user rate limits to control cost
 - [ ] **Backend error monitoring** — add Sentry (or similar) to Railway deployment for visibility into 500s
 - [ ] **`.env.local.example` audit** — ensure all required vars are documented for a clean local setup

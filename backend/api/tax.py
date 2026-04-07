@@ -4,25 +4,14 @@ Tax savings endpoints.
 
 import asyncio
 from fastapi import APIRouter, HTTPException, Depends
-from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 
-from services.db.supabase_client import get_supabase, get_or_create_portfolio, get_positions, get_tax_lots
-
+from services.db.supabase_client import get_or_create_portfolio, get_positions, get_tax_lots
 from services.market_data.yfinance_client import fetch_prices
 from services.tax_savings import find_tax_opportunities, summarize_tax_opportunities
 from services.ai.claude_client import explain_tax_opportunity
+from dependencies import get_current_user
 
 router = APIRouter()
-security = HTTPBearer()
-
-
-async def get_current_user(credentials: HTTPAuthorizationCredentials = Depends(security)) -> str:
-    try:
-        sb = get_supabase()
-        result = sb.auth.get_user(credentials.credentials)
-        return result.user.id
-    except Exception:
-        raise HTTPException(status_code=401, detail="Invalid or expired token")
 
 
 def _fetch_opportunities_sync(user_id: str):

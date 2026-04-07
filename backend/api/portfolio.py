@@ -1,5 +1,4 @@
 from fastapi import APIRouter, UploadFile, File, HTTPException, Depends, BackgroundTasks
-from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from datetime import datetime, timezone
 from pydantic import BaseModel
 from typing import Optional
@@ -25,9 +24,9 @@ from services.db.supabase_client import (
     update_portfolio_style,
 )
 from services.health_score import calculate_health_score
+from dependencies import get_current_user
 
 router = APIRouter()
-security = HTTPBearer()
 
 VALID_STYLES = {"play_it_safe", "beat_the_market", "long_game"}
 
@@ -36,15 +35,6 @@ STYLE_TREND_PERIOD = {
     "beat_the_market": "3mo",
     "long_game": "2y",
 }
-
-
-async def get_current_user(credentials: HTTPAuthorizationCredentials = Depends(security)) -> str:
-    try:
-        sb = get_supabase()
-        result = sb.auth.get_user(credentials.credentials)
-        return result.user.id
-    except Exception:
-        raise HTTPException(status_code=401, detail="Invalid or expired token")
 
 
 def _get_fund_weightings(positions):
@@ -104,6 +94,9 @@ async def update_investment_style(
     return {"investment_style": body.investment_style, "health": health}
 
 
+MAX_CSV_BYTES = 5 * 1024 * 1024  # 5 MB
+
+
 @router.post("/import/positions")
 async def import_positions(
     file: UploadFile = File(...),
@@ -113,7 +106,9 @@ async def import_positions(
     if not file.filename.endswith(".csv"):
         raise HTTPException(status_code=400, detail="File must be a CSV")
 
-    content = await file.read()
+    content = await file.read(MAX_CSV_BYTES + 1)
+    if len(content) > MAX_CSV_BYTES:
+        raise HTTPException(status_code=413, detail="File too large — maximum size is 5 MB")
     text = content.decode("utf-8")
 
     positions = parse_fidelity_positions(text)
@@ -143,7 +138,9 @@ async def import_transactions(
     if not file.filename.endswith(".csv"):
         raise HTTPException(status_code=400, detail="File must be a CSV")
 
-    content = await file.read()
+    content = await file.read(MAX_CSV_BYTES + 1)
+    if len(content) > MAX_CSV_BYTES:
+        raise HTTPException(status_code=413, detail="File too large — maximum size is 5 MB")
     text = content.decode("utf-8")
 
     transactions = parse_fidelity_transactions(text)
@@ -162,7 +159,7 @@ async def import_transactions(
 async def refresh_prices(user_id: str = Depends(get_current_user)):
     """Manually trigger a price refresh for this user's positions."""
     from services.price_refresh import _refresh_prices_sync
-    n = await asyncio.to_thread(_refresh_prices_sync)
+    n = await asyncio.to_thread(_refresh_prices_sync, user_id)
     portfolio = get_or_create_portfolio(user_id)
     positions = get_positions(portfolio["id"])
     health = await asyncio.to_thread(_build_health, positions, portfolio)

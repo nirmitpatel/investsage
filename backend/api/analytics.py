@@ -5,29 +5,19 @@ Returns performance breakdown, best/worst performers, and S&P 500 comparison.
 
 import asyncio
 from fastapi import APIRouter, HTTPException, Depends
-from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 
-from services.db.supabase_client import get_supabase, get_or_create_portfolio, get_positions
+from services.db.supabase_client import get_or_create_portfolio, get_positions
 from services.market_data.yfinance_client import fetch_sector_etf_performance
 from services.health_score import build_effective_sector_values, calculate_health_score
 from services.market_data.yfinance_client import fetch_fund_sector_weightings
 from api.portfolio import STYLE_TREND_PERIOD
+from dependencies import get_current_user
 import yfinance as yf
 import time
 import logging
 
 log = logging.getLogger(__name__)
 router = APIRouter()
-security = HTTPBearer()
-
-
-async def get_current_user(credentials: HTTPAuthorizationCredentials = Depends(security)) -> str:
-    try:
-        sb = get_supabase()
-        result = sb.auth.get_user(credentials.credentials)
-        return result.user.id
-    except Exception:
-        raise HTTPException(status_code=401, detail="Invalid or expired token")
 
 
 def _fetch_spy_performance() -> dict:

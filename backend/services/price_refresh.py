@@ -27,10 +27,13 @@ def _is_market_hours() -> bool:
     return MARKET_OPEN <= now.time() <= MARKET_CLOSE
 
 
-def _refresh_prices_sync() -> int:
-    """Fetch live prices and update all positions. Returns number of positions updated."""
+def _refresh_prices_sync(user_id: str | None = None) -> int:
+    """Fetch live prices and update positions. Pass user_id to scope to one user, or None for all (background loop)."""
     sb = get_supabase()
-    result = sb.table("positions").select("id, symbol, total_shares, total_cost_basis").execute()
+    query = sb.table("positions").select("id, symbol, total_shares, total_cost_basis")
+    if user_id:
+        query = query.eq("user_id", user_id)
+    result = query.execute()
     positions = result.data or []
     if not positions:
         return 0

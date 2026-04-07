@@ -4,27 +4,17 @@ AI analysis endpoints.
 
 import asyncio
 from fastapi import APIRouter, HTTPException, Depends
-from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 
-from services.db.supabase_client import get_supabase, get_or_create_portfolio, get_positions, get_tax_lots
+from services.db.supabase_client import get_or_create_portfolio, get_positions, get_tax_lots
 from services.market_data.yfinance_client import fetch_prices
 from services.health_score import calculate_health_score, build_effective_sector_values
 from services.market_data.yfinance_client import fetch_fund_sector_weightings, fetch_sector_etf_performance
 from services.tax_savings import find_tax_opportunities, summarize_tax_opportunities
 from services.ai.claude_client import analyze_portfolio, generate_sell_hold_buy
 from api.portfolio import STYLE_TREND_PERIOD
+from dependencies import get_current_user
 
 router = APIRouter()
-security = HTTPBearer()
-
-
-async def get_current_user(credentials: HTTPAuthorizationCredentials = Depends(security)) -> str:
-    try:
-        sb = get_supabase()
-        result = sb.auth.get_user(credentials.credentials)
-        return result.user.id
-    except Exception:
-        raise HTTPException(status_code=401, detail="Invalid or expired token")
 
 
 def _build_analysis_sync(user_id: str) -> dict:
