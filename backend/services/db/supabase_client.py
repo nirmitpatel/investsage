@@ -54,6 +54,7 @@ def upsert_positions(portfolio_id: str, user_id: str, positions: List[Dict[str, 
             "total_gain_loss_percent": p.get("total_gain_loss_percent"),
             "percent_of_account": p.get("percent_of_account"),
             "sector": p.get("sector"),
+            "previous_close": p.get("previous_close"),
         }
         for p in positions
     ]
