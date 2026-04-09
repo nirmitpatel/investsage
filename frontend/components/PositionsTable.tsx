@@ -58,13 +58,13 @@ function RecBadge({ rec }: { rec: any }) {
     timerRef.current = setTimeout(() => {
       if (btnRef.current) {
         const rect = btnRef.current.getBoundingClientRect()
-        const POPOVER_HEIGHT = 240
         const spaceBelow = window.innerHeight - rect.bottom
+        const spaceAbove = rect.top
         const right = Math.max(8, window.innerWidth - rect.right)
-        if (spaceBelow < POPOVER_HEIGHT) {
-          setPopoverStyle({ position: 'fixed', bottom: window.innerHeight - rect.top + 4, right })
+        if (spaceBelow < spaceAbove) {
+          setPopoverStyle({ position: 'fixed', bottom: window.innerHeight - rect.top + 4, right, maxHeight: spaceAbove - 8 })
         } else {
-          setPopoverStyle({ position: 'fixed', top: rect.bottom + 4, right })
+          setPopoverStyle({ position: 'fixed', top: rect.bottom + 4, right, maxHeight: spaceBelow - 8 })
         }
       }
       setOpen(true)
@@ -89,7 +89,7 @@ function RecBadge({ rec }: { rec: any }) {
       {open && (
         <div
           style={popoverStyle}
-          className="z-50 w-72 bg-[#13131f] border border-white/[0.10] rounded-xl shadow-2xl p-4 text-left"
+          className="z-50 w-72 bg-[#13131f] border border-white/[0.10] rounded-xl shadow-2xl p-4 text-left overflow-y-auto"
           onMouseEnter={() => clearTimeout(timerRef.current)}
           onMouseLeave={handleMouseLeave}
         >

@@ -167,6 +167,7 @@ export default function Dashboard() {
   const [positions, setPositions] = useState<Position[]>([])
   const [health, setHealth] = useState<Health | null>(null)
   const [uploading, setUploading] = useState<'positions' | 'transactions' | null>(null)
+  const [uploadStep, setUploadStep] = useState('')
   const [uploadMsg, setUploadMsg] = useState('')
   const [uploadError, setUploadError] = useState(false)
   const [loadingPortfolio, setLoadingPortfolio] = useState(true)
@@ -182,6 +183,22 @@ export default function Dashboard() {
   const transactionsRef = useRef<HTMLInputElement>(null)
 
   useEffect(() => { loadPortfolio() }, [])
+
+  useEffect(() => {
+    if (uploading !== 'positions') { setUploadStep(''); return }
+    const steps: [number, string][] = [
+      [0,    'Parsing CSV…'],
+      [2000, 'Fetching prices…'],
+      [12000, 'Fetching sectors…'],
+      [22000, 'Calculating health score…'],
+      [28000, 'Almost done…'],
+    ]
+    setUploadStep(steps[0][1])
+    const timers = steps.slice(1).map(([delay, label]) =>
+      setTimeout(() => setUploadStep(label), delay)
+    )
+    return () => timers.forEach(clearTimeout)
+  }, [uploading])
 
   async function loadPortfolio() {
     setLoadingPortfolio(true)
@@ -367,7 +384,7 @@ export default function Dashboard() {
                   className="flex items-center gap-2 bg-violet-600 hover:bg-violet-500 disabled:opacity-50 px-5 py-2.5 rounded-xl text-sm font-medium transition shadow-lg shadow-violet-500/20"
                 >
                   {uploading === 'positions' ? <Spinner /> : <UploadIcon />}
-                  {uploading === 'positions' ? 'Fetching prices & sectors (~30s)...' : 'Upload Positions CSV'}
+                  {uploading === 'positions' ? uploadStep || 'Uploading…' : 'Upload Positions CSV'}
                 </button>
                 <button onClick={() => transactionsRef.current?.click()} disabled={uploading !== null}
                   className="flex items-center gap-2 bg-white/[0.06] hover:bg-white/[0.09] border border-white/[0.08] disabled:opacity-50 px-5 py-2.5 rounded-xl text-sm font-medium transition"
@@ -380,6 +397,25 @@ export default function Dashboard() {
                 onChange={(e) => e.target.files?.[0] && handleUpload('positions', e.target.files[0])} />
               <input ref={transactionsRef} type="file" accept=".csv" className="hidden"
                 onChange={(e) => e.target.files?.[0] && handleUpload('transactions', e.target.files[0])} />
+              {uploading === 'positions' && (
+                <div className="mt-4 space-y-2">
+                  {(['Parsing CSV…', 'Fetching prices…', 'Fetching sectors…', 'Calculating health score…', 'Almost done…'] as const).map((label) => {
+                    const stepOrder = ['Parsing CSV…', 'Fetching prices…', 'Fetching sectors…', 'Calculating health score…', 'Almost done…']
+                    const currentIdx = stepOrder.indexOf(uploadStep)
+                    const thisIdx = stepOrder.indexOf(label)
+                    const isDone = thisIdx < currentIdx
+                    const isActive = thisIdx === currentIdx
+                    return (
+                      <div key={label} className={`flex items-center gap-2 text-xs transition-opacity ${isActive ? 'opacity-100' : isDone ? 'opacity-40' : 'opacity-20'}`}>
+                        <span className={`w-4 h-4 rounded-full flex items-center justify-center flex-shrink-0 ${isDone ? 'bg-emerald-500/30 text-emerald-400' : isActive ? 'bg-violet-500/30 text-violet-300' : 'bg-white/10 text-gray-600'}`}>
+                          {isDone ? '✓' : isActive ? '·' : '·'}
+                        </span>
+                        <span className={isDone ? 'text-emerald-400' : isActive ? 'text-violet-300' : 'text-gray-600'}>{label}</span>
+                      </div>
+                    )
+                  })}
+                </div>
+              )}
               {uploadMsg && (
                 <p className={`mt-4 text-sm flex items-center gap-2 ${uploadError ? 'text-red-400' : 'text-emerald-400'}`}>
                   {uploadError ? '✕' : '✓'} {uploadMsg}
