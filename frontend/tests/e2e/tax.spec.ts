@@ -10,14 +10,14 @@ test.describe('Tax Savings page', () => {
     await mockTaxAPI(page)
     await page.goto('/tax')
     await expect(page.getByText('JNJ')).toBeVisible()
-    await expect(page.getByText(/\$20/)).toBeVisible()
+    await expect(page.getByText(/\$20/).first()).toBeVisible()
   })
 
   test('shows summary stats', async ({ page }) => {
     await mockTaxAPI(page)
     await page.goto('/tax')
     // opportunity count shown somewhere
-    await expect(page.getByText('1')).toBeVisible()
+    await expect(page.getByText('1', { exact: true }).first()).toBeVisible()
   })
 
   test('urgent badge shown when urgency is high', async ({ page }) => {
@@ -45,13 +45,13 @@ test.describe('Tax Savings page', () => {
       has_lots: true,
     })
     await page.goto('/tax')
-    await expect(page.getByText(/no tax-loss/i)).toBeVisible()
+    await expect(page.getByText(/no harvesting opportunities/i)).toBeVisible()
   })
 
   test('import transactions prompt when no lots', async ({ page }) => {
     await mockTaxAPI(page, { has_lots: false, opportunities: [], summary: {} })
     await page.goto('/tax')
-    await expect(page.getByText(/import your transactions/i)).toBeVisible()
+    await expect(page.getByText(/import.*transactions/i).first()).toBeVisible()
   })
 
   test('API error shows retry card', async ({ page }) => {

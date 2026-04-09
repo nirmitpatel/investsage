@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState } from 'react'
 import { useRouter } from 'next/navigation'
-import { createClient } from '@/lib/supabase'
+import { createClient, getToken } from '@/lib/supabase'
 import Sidebar from '@/components/Sidebar'
 import SectorBreakdownPanel from '@/components/SectorBreakdownPanel'
 import PositionsTable from '@/components/PositionsTable'
@@ -182,11 +182,6 @@ export default function Dashboard() {
   const transactionsRef = useRef<HTMLInputElement>(null)
 
   useEffect(() => { loadPortfolio() }, [])
-
-  async function getToken() {
-    const { data } = await supabase.auth.getSession()
-    return data.session?.access_token ?? null
-  }
 
   async function loadPortfolio() {
     setLoadingPortfolio(true)

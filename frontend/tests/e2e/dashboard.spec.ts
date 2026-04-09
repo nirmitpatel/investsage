@@ -16,7 +16,7 @@ test.describe('Dashboard', () => {
 
     // Health score visible
     await expect(page.getByText('85')).toBeVisible()
-    await expect(page.getByText('B')).toBeVisible()
+    await expect(page.getByText('B', { exact: true })).toBeVisible()
 
     // Position rows visible
     await expect(page.getByText('AAPL')).toBeVisible()
@@ -26,7 +26,7 @@ test.describe('Dashboard', () => {
   test('shows investment style badge in header', async ({ page }) => {
     await mockPortfolioAPI(page)
     await page.goto('/dashboard')
-    await expect(page.getByText(/beat the market/i)).toBeVisible()
+    await expect(page.getByText(/beat the market/i).first()).toBeVisible()
   })
 
   test('shows style modal when investment_style is null', async ({ page }) => {
@@ -79,8 +79,8 @@ test.describe('Dashboard', () => {
   test('sector breakdown panel visible with sector names', async ({ page }) => {
     await mockPortfolioAPI(page)
     await page.goto('/dashboard')
-    await expect(page.getByText('Technology')).toBeVisible()
-    await expect(page.getByText('Healthcare')).toBeVisible()
+    await expect(page.getByText('Technology').first()).toBeVisible()
+    await expect(page.getByText('Healthcare').first()).toBeVisible()
   })
 
   test('refresh prices button triggers API call', async ({ page }) => {
@@ -132,10 +132,11 @@ test.describe('Dashboard', () => {
     await mockRecommendAPI(page, 'JNJ')
     await page.goto('/dashboard')
 
-    // Trigger both recommendations so both badges render
-    for (const btn of await page.getByRole('button', { name: /ask ai/i }).all()) {
-      await btn.click()
-    }
+    // Trigger both recommendations so both badges render (click sequentially — each click
+    // replaces the "Ask AI" button with a badge, so re-query first() each time)
+    await page.getByRole('button', { name: /ask ai/i }).first().click()
+    await expect(page.getByRole('button', { name: /hold/i }).first()).toBeVisible()
+    await page.getByRole('button', { name: /ask ai/i }).first().click()
     // Wait for both badges
     await expect(page.getByRole('button', { name: /hold/i }).first()).toBeVisible()
 

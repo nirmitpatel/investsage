@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState } from 'react'
 import { useRouter } from 'next/navigation'
-import { createClient } from '@/lib/supabase'
+import { createClient, getToken } from '@/lib/supabase'
 import Sidebar from '@/components/Sidebar'
 
 const API = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:8000'
@@ -36,15 +36,10 @@ export default function InsightsPage() {
   useEffect(() => {
     if (mountedRef.current) return
     mountedRef.current = true
-    supabase.auth.getSession().then(({ data }) => {
-      if (!data.session) router.push('/login')
+    getToken().then(token => {
+      if (!token) router.push('/login')
     })
   }, [])
-
-  async function getToken() {
-    const { data } = await supabase.auth.getSession()
-    return data.session?.access_token ?? null
-  }
 
   async function handleAnalyze() {
     setLoading(true)

@@ -63,40 +63,12 @@ export const MOCK_AI_ANALYZE_RESPONSE = {
 
 /** Mock Supabase auth to return a valid session — prevents redirect to /login.
  *
- * @supabase/auth-helpers-nextjs stores the session in the 'supabase.auth.token'
- * cookie (read via document.cookie, not a network call), so route mocking alone
- * is insufficient.  We set the cookie directly, then also intercept any
- * refresh/validation network calls just in case.
+ * Sets window.__E2E_TOKEN__ via addInitScript so that the getToken() utility
+ * in lib/supabase.ts returns a fake token without needing real Supabase cookies.
  */
 export async function mockSupabaseAuth(page: Page) {
-  const expiresAt = Math.floor(Date.now() / 1000) + 3600
-  const session = JSON.stringify({
-    access_token: 'fake-access-token',
-    refresh_token: 'fake-refresh-token',
-    token_type: 'bearer',
-    expires_in: 3600,
-    expires_at: expiresAt,
-    user: { id: 'user-1', email: 'test@example.com' },
-  })
-  await page.context().addCookies([{
-    name: 'supabase.auth.token',
-    value: session,
-    domain: 'localhost',
-    path: '/',
-  }])
-  // Also mock network auth calls (e.g. token refresh if expires_at is near)
-  await page.route('**/auth/v1/**', route => {
-    route.fulfill({
-      status: 200,
-      contentType: 'application/json',
-      body: JSON.stringify({
-        access_token: 'fake-access-token',
-        refresh_token: 'fake-refresh-token',
-        token_type: 'bearer',
-        expires_in: 3600,
-        user: { id: 'user-1', email: 'test@example.com' },
-      }),
-    })
+  await page.addInitScript(() => {
+    (window as any).__E2E_TOKEN__ = 'fake-access-token'
   })
 }
 
@@ -110,7 +82,7 @@ export async function mockPortfolioAPI(page: Page, overrides?: Partial<typeof MO
         body: JSON.stringify({ ...MOCK_PORTFOLIO_RESPONSE, ...overrides }),
       })
     } else {
-      route.continue()
+      route.fallback()
     }
   })
 }
@@ -134,7 +106,7 @@ export async function mockStylePatchAPI(page: Page, newStyle: string) {
         body: JSON.stringify({ health: { ...MOCK_HEALTH, investment_style: newStyle } }),
       })
     } else {
-      route.continue()
+      route.fallback()
     }
   })
 }

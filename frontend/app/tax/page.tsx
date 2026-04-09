@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
-import { createClient } from '@/lib/supabase'
+import { createClient, getToken } from '@/lib/supabase'
 import Sidebar from '@/components/Sidebar'
 
 const API = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:8000'
@@ -64,11 +64,6 @@ export default function TaxPage() {
   const [opportunities, setOpportunities] = useState<TaxOpportunity[]>([])
   const [explanations, setExplanations] = useState<Record<string, string>>({})
   const [explaining, setExplaining] = useState<Record<string, boolean>>({})
-
-  async function getToken() {
-    const { data } = await supabase.auth.getSession()
-    return data.session?.access_token ?? null
-  }
 
   useEffect(() => {
     load()
