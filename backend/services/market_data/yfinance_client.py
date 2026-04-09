@@ -130,6 +130,8 @@ SECTOR_ETFS: Dict[str, str] = {
 def fetch_sector_etf_performance(sectors: List[str], period: str = "3mo") -> Dict[str, float]:
     """Fetch % change over `period` for SPDR sector ETFs matching the given sectors.
     Returns {sector_name: percent_change}"""
+    # Normalize aliases from DB (e.g. "Health Care" → "Healthcare") before lookup
+    sectors = [SECTOR_NAME_NORMALIZE.get(s, s) for s in sectors]
     etf_to_sector = {v: k for k, v in SECTOR_ETFS.items()}
     relevant_etfs = [SECTOR_ETFS[s] for s in sectors if s in SECTOR_ETFS]
     if not relevant_etfs:

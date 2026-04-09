@@ -93,13 +93,20 @@ class TestFetchSectors:
 # ── fetch_sector_etf_performance ─────────────────────────────────────────────
 
 class TestFetchSectorEtfPerformance:
-    def test_returns_empty_for_unrecognised_sector(self):
-        """If a raw yfinance sector name slips through without normalization,
-        the lookup returns {} — this is the silent failure we want to catch."""
-        result = fetch_sector_etf_performance(["Health Care"])
-        assert result == {}, (
-            "'Health Care' is not in SECTOR_ETFS so the result must be empty. "
-            "Normalization must happen before this call."
+    def test_health_care_alias_normalizes_and_returns_result(self):
+        """'Health Care' (yfinance alias) must normalize to 'Healthcare' inside
+        fetch_sector_etf_performance so callers with stale DB values still get a trend."""
+        close_series = pd.Series(
+            [100.0, 103.0],
+            index=pd.to_datetime(["2024-01-01", "2024-04-01"]),
+            name="XLV",
+        )
+        mock_df = pd.DataFrame({"Close": close_series})
+        with patch("services.market_data.yfinance_client.yf.download", return_value=mock_df):
+            result = fetch_sector_etf_performance(["Health Care"])
+        assert "Healthcare" in result, (
+            "fetch_sector_etf_performance must normalize 'Health Care' → 'Healthcare' "
+            "and return a trend keyed by the canonical name."
         )
 
     def test_returns_empty_for_unknown_sector(self):

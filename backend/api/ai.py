@@ -8,7 +8,7 @@ from fastapi import APIRouter, HTTPException, Depends
 from services.db.supabase_client import get_or_create_portfolio, get_positions, get_tax_lots
 from services.market_data.yfinance_client import fetch_prices
 from services.health_score import calculate_health_score, build_effective_sector_values
-from services.market_data.yfinance_client import fetch_fund_sector_weightings, fetch_sector_etf_performance
+from services.market_data.yfinance_client import fetch_fund_sector_weightings, fetch_sector_etf_performance, SECTOR_NAME_NORMALIZE
 from services.tax_savings import find_tax_opportunities, summarize_tax_opportunities
 from services.ai.claude_client import analyze_portfolio, generate_sell_hold_buy
 from api.portfolio import STYLE_TREND_PERIOD
@@ -61,7 +61,8 @@ def _recommend_sync(symbol: str, portfolio: dict, positions: list) -> dict:
     period = STYLE_TREND_PERIOD.get(investment_style, "3mo")
 
     # Fetch sector trend for this position's sector
-    sector = position.get("sector") or "Unknown"
+    raw_sector = position.get("sector") or "Unknown"
+    sector = SECTOR_NAME_NORMALIZE.get(raw_sector, raw_sector)
     sector_trend = None
     if sector not in ("ETF", "Mutual Fund", "Unknown"):
         trends = fetch_sector_etf_performance([sector], period=period)
