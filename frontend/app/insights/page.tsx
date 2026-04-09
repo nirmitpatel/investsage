@@ -52,7 +52,7 @@ export default function InsightsPage() {
         method: 'POST',
         headers: { Authorization: `Bearer ${token}` },
       })
-      if (res.status === 401) { router.push('/login'); return }
+      if (res.status === 401) { router.push('/login?reason=session_expired'); return }
       if (res.ok) {
         setResult(await res.json())
       } else {
@@ -74,13 +74,13 @@ export default function InsightsPage() {
       <Sidebar active="insights" onSignOut={handleSignOut} />
 
       {/* Main */}
-      <main className="flex-1 overflow-y-auto">
-        <div className="sticky top-0 z-10 bg-[#0a0a0f]/80 backdrop-blur border-b border-white/[0.06] px-8 py-4">
+      <main className="flex-1 overflow-y-auto pb-16 md:pb-0">
+        <div className="sticky top-0 z-10 bg-[#0a0a0f]/80 backdrop-blur border-b border-white/[0.06] px-4 md:px-8 py-4">
           <h1 className="text-lg font-semibold">AI Insights</h1>
           <p className="text-xs text-gray-500 mt-0.5">Plain-English portfolio analysis powered by Claude</p>
         </div>
 
-        <div className="px-8 py-6 space-y-6 max-w-3xl">
+        <div className="px-4 md:px-8 py-6 space-y-6 max-w-3xl">
           {/* Trigger */}
           {!result && !error && (
             <div className="bg-white/[0.03] border border-white/[0.08] rounded-2xl p-10 text-center">

@@ -190,7 +190,7 @@ export default function Dashboard() {
     if (!token) { router.push('/login'); return }
     try {
       const res = await fetch(`${API}/api/v1/portfolio`, { headers: { Authorization: `Bearer ${token}` } })
-      if (res.status === 401) { router.push('/login'); return }
+      if (res.status === 401) { router.push('/login?reason=session_expired'); return }
       if (res.ok) {
         const data = await res.json()
         setPortfolio(data.portfolio ?? null)
@@ -311,9 +311,9 @@ export default function Dashboard() {
 
       <Sidebar active="portfolio" onSignOut={handleSignOut} />
 
-      <main className="flex-1 overflow-y-auto">
+      <main className="flex-1 overflow-y-auto pb-16 md:pb-0">
         {/* Top bar */}
-        <div className="sticky top-0 z-10 bg-[#0a0a0f]/80 backdrop-blur border-b border-white/[0.06] px-8 py-4 flex items-center justify-between">
+        <div className="sticky top-0 z-10 bg-[#0a0a0f]/80 backdrop-blur border-b border-white/[0.06] px-4 md:px-8 py-4 flex items-center justify-between">
           <div className="flex items-center gap-3">
             <div>
               <h1 className="text-lg font-semibold">Portfolio Overview</h1>
@@ -354,7 +354,7 @@ export default function Dashboard() {
           </div>
         </div>
 
-        <div className="px-8 py-6 space-y-6">
+        <div className="px-4 md:px-8 py-6 space-y-6">
           {/* Import panel */}
           {showImport && (
             <div className="bg-white/[0.03] border border-white/[0.08] rounded-2xl p-6">

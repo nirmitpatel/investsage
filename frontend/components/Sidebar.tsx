@@ -6,7 +6,7 @@ type ActivePage = 'portfolio' | 'tax' | 'insights' | 'analytics'
 
 const NAV_ITEMS: { key: ActivePage; label: string; href: string; icon: React.ReactNode }[] = [
   { key: 'portfolio', label: 'Portfolio', href: '/dashboard', icon: <GridIcon /> },
-  { key: 'tax', label: 'Tax Savings', href: '/tax', icon: <LeafIcon /> },
+  { key: 'tax', label: 'Tax', href: '/tax', icon: <LeafIcon /> },
   { key: 'insights', label: 'AI Insights', href: '/insights', icon: <SparkleIcon /> },
   { key: 'analytics', label: 'Analytics', href: '/analytics', icon: <ChartIcon /> },
 ]
@@ -14,40 +14,67 @@ const NAV_ITEMS: { key: ActivePage; label: string; href: string; icon: React.Rea
 export default function Sidebar({ active, onSignOut }: { active: ActivePage; onSignOut: () => void }) {
   const router = useRouter()
   return (
-    <aside className="w-60 shrink-0 border-r border-white/[0.06] flex flex-col py-6 px-4">
-      <div className="flex items-center gap-2.5 px-2 mb-8">
-        <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-violet-500 to-violet-700 flex items-center justify-center shadow-md shadow-violet-500/30">
-          <svg className="w-4 h-4 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
-            <path strokeLinecap="round" strokeLinejoin="round" d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6" />
-          </svg>
+    <>
+      {/* Desktop sidebar */}
+      <aside className="hidden md:flex w-60 shrink-0 border-r border-white/[0.06] flex-col py-6 px-4">
+        <div className="flex items-center gap-2.5 px-2 mb-8">
+          <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-violet-500 to-violet-700 flex items-center justify-center shadow-md shadow-violet-500/30">
+            <svg className="w-4 h-4 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6" />
+            </svg>
+          </div>
+          <span className="font-bold text-lg tracking-tight">InvestSage</span>
         </div>
-        <span className="font-bold text-lg tracking-tight">InvestSage</span>
-      </div>
-      <nav className="flex-1 space-y-1">
+        <nav className="flex-1 space-y-1">
+          {NAV_ITEMS.map(item => (
+            <div
+              key={item.key}
+              onClick={() => router.push(item.href)}
+              className={`flex items-center gap-2.5 px-3 py-2.5 rounded-xl text-sm transition cursor-pointer
+                ${active === item.key
+                  ? 'bg-violet-600/15 text-violet-300 border border-violet-500/20'
+                  : 'text-gray-500 hover:text-gray-300 hover:bg-white/[0.04]'}`}
+            >
+              {item.icon}
+              <span>{item.label}</span>
+            </div>
+          ))}
+        </nav>
+        <button
+          onClick={onSignOut}
+          className="flex items-center gap-2.5 px-3 py-2.5 rounded-xl text-gray-500 hover:text-gray-300 hover:bg-white/[0.04] text-sm transition"
+        >
+          <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.8}>
+            <path strokeLinecap="round" strokeLinejoin="round" d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a2 2 0 01-2 2H5a2 2 0 01-2-2V7a2 2 0 012-2h6a2 2 0 012 2v1" />
+          </svg>
+          Sign out
+        </button>
+      </aside>
+
+      {/* Mobile bottom nav */}
+      <nav className="fixed bottom-0 left-0 right-0 z-40 flex md:hidden border-t border-white/[0.06] bg-[#0a0a0f]/95 backdrop-blur-sm safe-area-inset-bottom">
         {NAV_ITEMS.map(item => (
-          <div
+          <button
             key={item.key}
             onClick={() => router.push(item.href)}
-            className={`flex items-center gap-2.5 px-3 py-2.5 rounded-xl text-sm transition cursor-pointer
-              ${active === item.key
-                ? 'bg-violet-600/15 text-violet-300 border border-violet-500/20'
-                : 'text-gray-500 hover:text-gray-300 hover:bg-white/[0.04]'}`}
+            className={`flex-1 flex flex-col items-center gap-1 py-3 text-[10px] font-medium transition
+              ${active === item.key ? 'text-violet-400' : 'text-gray-600 active:text-gray-300'}`}
           >
             {item.icon}
             <span>{item.label}</span>
-          </div>
+          </button>
         ))}
+        <button
+          onClick={onSignOut}
+          className="flex-1 flex flex-col items-center gap-1 py-3 text-[10px] font-medium text-gray-600 active:text-gray-300 transition"
+        >
+          <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.8}>
+            <path strokeLinecap="round" strokeLinejoin="round" d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a2 2 0 01-2 2H5a2 2 0 01-2-2V7a2 2 0 012-2h6a2 2 0 012 2v1" />
+          </svg>
+          <span>Sign out</span>
+        </button>
       </nav>
-      <button
-        onClick={onSignOut}
-        className="flex items-center gap-2.5 px-3 py-2.5 rounded-xl text-gray-500 hover:text-gray-300 hover:bg-white/[0.04] text-sm transition"
-      >
-        <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.8}>
-          <path strokeLinecap="round" strokeLinejoin="round" d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a2 2 0 01-2 2H5a2 2 0 01-2-2V7a2 2 0 012-2h6a2 2 0 012 2v1" />
-        </svg>
-        Sign out
-      </button>
-    </aside>
+    </>
   )
 }
 

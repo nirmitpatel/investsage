@@ -22,8 +22,8 @@ _Say "execute next" to run the top unchecked item. This file is updated after ev
 
 ## P1 — Polish & UX
 
-- [ ] **Session expiry handling** — 401 mid-session should redirect to `/login` with "Session expired" message (currently silent across all pages)
-- [ ] **Mobile layout** — positions table overflows on phones; need horizontal scroll wrapper + responsive sidebar (hamburger or bottom nav)
+- [x] **Session expiry handling** — 401 mid-session should redirect to `/login` with "Session expired" message (currently silent across all pages)
+- [x] **Mobile layout** — positions table overflows on phones; need horizontal scroll wrapper + responsive sidebar (hamburger or bottom nav)
 - [ ] **Upload progress indicator** — positions import takes ~30s; add step labels ("Fetching prices… Fetching sectors…") to reduce abandonment
 - [ ] **AI recommendation error state** — if `POST /recommend` fails in PositionsTable, button silently does nothing; show inline error
 - [x] **Long game trend period** — change from `2y` to `10y` in `STYLE_TREND_PERIOD`; yfinance supports it

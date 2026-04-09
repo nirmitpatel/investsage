@@ -79,7 +79,7 @@ export default function TaxPage() {
       const res = await fetch(`${API}/api/v1/tax/opportunities`, {
         headers: { Authorization: `Bearer ${token}` },
       })
-      if (res.status === 401) { router.push('/login'); return }
+      if (res.status === 401) { router.push('/login?reason=session_expired'); return }
       if (res.ok) {
         const data = await res.json()
         setHasLots(data.has_lots ?? false)
@@ -120,13 +120,13 @@ export default function TaxPage() {
       <Sidebar active="tax" onSignOut={handleSignOut} />
 
       {/* Main */}
-      <main className="flex-1 overflow-y-auto">
-        <div className="sticky top-0 z-10 bg-[#0a0a0f]/80 backdrop-blur border-b border-white/[0.06] px-8 py-4">
+      <main className="flex-1 overflow-y-auto pb-16 md:pb-0">
+        <div className="sticky top-0 z-10 bg-[#0a0a0f]/80 backdrop-blur border-b border-white/[0.06] px-4 md:px-8 py-4">
           <h1 className="text-lg font-semibold">Tax Savings Finder</h1>
           <p className="text-xs text-gray-500 mt-0.5">Identify tax-loss harvesting opportunities in your portfolio</p>
         </div>
 
-        <div className="px-8 py-6 space-y-6">
+        <div className="px-4 md:px-8 py-6 space-y-6">
           {loading ? (
             <div className="bg-white/[0.03] border border-white/[0.08] rounded-2xl p-16 text-center">
               <svg className="animate-spin h-6 w-6 text-violet-400 mx-auto mb-3" viewBox="0 0 24 24" fill="none">

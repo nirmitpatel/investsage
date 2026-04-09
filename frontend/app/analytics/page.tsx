@@ -75,7 +75,7 @@ export default function AnalyticsPage() {
       const res = await fetch(`${API}/api/v1/analytics`, {
         headers: { Authorization: `Bearer ${token}` },
       })
-      if (res.status === 401) { router.push('/login'); return }
+      if (res.status === 401) { router.push('/login?reason=session_expired'); return }
       if (res.ok) {
         setData(await res.json())
       } else {
@@ -96,13 +96,13 @@ export default function AnalyticsPage() {
     <div className="min-h-screen bg-[#0a0a0f] text-white flex">
       <Sidebar active="analytics" onSignOut={handleSignOut} />
 
-      <main className="flex-1 overflow-y-auto">
-        <div className="sticky top-0 z-10 bg-[#0a0a0f]/80 backdrop-blur border-b border-white/[0.06] px-8 py-4">
+      <main className="flex-1 overflow-y-auto pb-16 md:pb-0">
+        <div className="sticky top-0 z-10 bg-[#0a0a0f]/80 backdrop-blur border-b border-white/[0.06] px-4 md:px-8 py-4">
           <h1 className="text-lg font-semibold">Analytics</h1>
           <p className="text-xs text-gray-500 mt-0.5">Performance breakdown and market comparison</p>
         </div>
 
-        <div className="px-8 py-6 space-y-6">
+        <div className="px-4 md:px-8 py-6 space-y-6">
           {loading ? (
             <LoadingCard label="Loading analytics..." />
           ) : error ? (
