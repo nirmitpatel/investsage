@@ -1,7 +1,11 @@
 """
-Tests for yfinance_client — focus on sector normalization and ETF performance lookup.
+Tests for yfinance_client -- sector normalization and ETF performance lookup.
 
 These tests mock yfinance calls so they run offline and fast.
+
+yfinance.download always returns a MultiIndex DataFrame:
+  columns = [('Close', 'XLV'), ('High', 'XLV'), ...]
+so mock DataFrames must match that shape.
 """
 
 import pandas as pd
@@ -16,35 +20,41 @@ from services.market_data.yfinance_client import (
 )
 
 
-# ── SECTOR_NAME_NORMALIZE invariants ─────────────────────────────────────────
+def _mock_download(etf: str, prices: list) -> pd.DataFrame:
+    """Build a minimal MultiIndex DataFrame matching real yfinance.download output."""
+    idx = pd.to_datetime(["2024-01-01", "2024-04-01"])
+    df = pd.DataFrame(
+        {("Close", etf): prices},
+        index=idx,
+    )
+    df.columns = pd.MultiIndex.from_tuples(df.columns)
+    return df
+
+
+# -- SECTOR_NAME_NORMALIZE invariants -----------------------------------------
 
 class TestSectorNameNormalize:
     def test_health_care_maps_to_healthcare(self):
-        """yfinance returns 'Health Care' for biotech/pharma stocks (e.g. VRTX, JNJ).
-        The ETF lookup dict uses 'Healthcare'. Without this entry sector trend is silently None."""
+        """yfinance returns 'Health Care' for biotech/pharma (VRTX, JNJ etc).
+        The ETF lookup dict uses 'Healthcare'. Without this entry sector trend is None."""
         assert "Health Care" in SECTOR_NAME_NORMALIZE
         assert SECTOR_NAME_NORMALIZE["Health Care"] == "Healthcare"
 
     def test_every_canonical_name_has_sector_etf(self):
-        """Every name that SECTOR_NAME_NORMALIZE maps to must exist in SECTOR_ETFS
-        so the ETF performance lookup never silently returns {}."""
+        """Every name SECTOR_NAME_NORMALIZE maps to must exist in SECTOR_ETFS."""
         for alias, canonical in SECTOR_NAME_NORMALIZE.items():
-            if canonical not in ("Fixed Income",):  # non-equity categories are exempt
+            if canonical not in ("Fixed Income",):
                 assert canonical in SECTOR_ETFS, (
-                    f"SECTOR_NAME_NORMALIZE maps '{alias}' → '{canonical}' "
+                    f"SECTOR_NAME_NORMALIZE maps '{alias}' -> '{canonical}' "
                     f"but '{canonical}' is missing from SECTOR_ETFS"
                 )
 
     def test_health_care_alias_absent_from_sector_etfs(self):
-        """'Health Care' must NOT be a key in SECTOR_ETFS.
-        Normalization must happen before the ETF lookup, not inside it."""
-        assert "Health Care" not in SECTOR_ETFS, (
-            "Add 'Health Care' to SECTOR_NAME_NORMALIZE instead of SECTOR_ETFS "
-            "so normalization is applied at data-ingestion time."
-        )
+        """'Health Care' must NOT be a key in SECTOR_ETFS -- normalization handles it."""
+        assert "Health Care" not in SECTOR_ETFS
 
 
-# ── fetch_sectors ─────────────────────────────────────────────────────────────
+# -- fetch_sectors ------------------------------------------------------------
 
 class TestFetchSectors:
     def _mock_ticker(self, info: dict):
@@ -53,8 +63,6 @@ class TestFetchSectors:
         return t
 
     def test_health_care_normalized_to_healthcare(self):
-        """Regression: yfinance returns 'Health Care' for VRTX/JNJ/etc.
-        fetch_sectors must normalize before storing so downstream ETF lookups succeed."""
         with patch("services.market_data.yfinance_client.yf.Ticker",
                    return_value=self._mock_ticker({"sector": "Health Care"})):
             result = fetch_sectors(["VRTX"])
@@ -90,22 +98,16 @@ class TestFetchSectors:
         assert result == {}
 
 
-# ── fetch_sector_etf_performance ─────────────────────────────────────────────
+# -- fetch_sector_etf_performance ---------------------------------------------
 
 class TestFetchSectorEtfPerformance:
     def test_health_care_alias_normalizes_and_returns_result(self):
-        """'Health Care' (yfinance alias) must normalize to 'Healthcare' inside
-        fetch_sector_etf_performance so callers with stale DB values still get a trend."""
-        close_series = pd.Series(
-            [100.0, 103.0],
-            index=pd.to_datetime(["2024-01-01", "2024-04-01"]),
-            name="XLV",
-        )
-        mock_df = pd.DataFrame({"Close": close_series})
+        """'Health Care' must normalize to 'Healthcare' and return a real trend value."""
+        mock_df = _mock_download("XLV", [100.0, 103.0])
         with patch("services.market_data.yfinance_client.yf.download", return_value=mock_df):
             result = fetch_sector_etf_performance(["Health Care"])
         assert "Healthcare" in result, (
-            "fetch_sector_etf_performance must normalize 'Health Care' → 'Healthcare' "
+            "fetch_sector_etf_performance must normalize 'Health Care' -> 'Healthcare' "
             "and return a trend keyed by the canonical name."
         )
 
@@ -114,28 +116,33 @@ class TestFetchSectorEtfPerformance:
         assert result == {}
 
     def test_returns_empty_when_all_sectors_unknown(self):
-        result = fetch_sector_etf_performance(["Health Care", "Imaginary"])
+        # 'Health Care' normalizes to 'Healthcare' which has an ETF, so use truly unknown
+        result = fetch_sector_etf_performance(["Imaginary", "AlsoFake"])
         assert result == {}
 
     def test_healthcare_key_present_in_sector_etfs(self):
-        """Canonical 'Healthcare' must resolve to XLV so the ETF download is attempted."""
         assert SECTOR_ETFS.get("Healthcare") == "XLV"
 
     def test_single_sector_computes_pct_change(self):
-        """End-to-end: fetching Healthcare trend with mocked yfinance download
-        returns a percentage calculated from first→last close price."""
-        close_series = pd.Series(
-            [100.0, 105.0],
-            index=pd.to_datetime(["2024-01-01", "2024-04-01"]),
-            name="XLV",
-        )
-        mock_df = pd.DataFrame({"Close": close_series})
-
+        """End-to-end: correct % change from first to last close."""
+        mock_df = _mock_download("XLV", [100.0, 105.0])
         with patch("services.market_data.yfinance_client.yf.download", return_value=mock_df):
             result = fetch_sector_etf_performance(["Healthcare"], period="3mo")
-
         assert "Healthcare" in result
         assert result["Healthcare"] == pytest.approx(5.0)
+
+    def test_multiple_sectors_computed_correctly(self):
+        """Multiple ETFs in one download -- each sector gets correct value."""
+        idx = pd.to_datetime(["2024-01-01", "2024-04-01"])
+        df = pd.DataFrame(
+            {("Close", "XLV"): [100.0, 104.0], ("Close", "XLK"): [200.0, 210.0]},
+            index=idx,
+        )
+        df.columns = pd.MultiIndex.from_tuples(df.columns)
+        with patch("services.market_data.yfinance_client.yf.download", return_value=df):
+            result = fetch_sector_etf_performance(["Healthcare", "Technology"])
+        assert result["Healthcare"] == pytest.approx(4.0)
+        assert result["Technology"] == pytest.approx(5.0)
 
     def test_returns_empty_when_download_data_is_empty(self):
         with patch("services.market_data.yfinance_client.yf.download",

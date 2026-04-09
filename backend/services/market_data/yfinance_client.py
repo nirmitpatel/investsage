@@ -141,15 +141,15 @@ def fetch_sector_etf_performance(sectors: List[str], period: str = "3mo") -> Dic
         data = yf.download(relevant_etfs, period=period, auto_adjust=True, progress=False, threads=False)
         if data.empty:
             return {}
+        # data["Close"] is always a DataFrame with ticker as column (yfinance MultiIndex)
         close = data["Close"] if "Close" in data.columns else data
         for etf in relevant_etfs:
             try:
-                if len(relevant_etfs) == 1:
-                    series = close.dropna()
-                else:
-                    col = close[etf] if etf in close.columns else None
-                    series = col.dropna() if col is not None else None
-                if series is not None and len(series) >= 2:
+                col = close[etf] if etf in close.columns else None
+                if col is None:
+                    continue
+                series = col.dropna()
+                if len(series) >= 2:
                     pct = ((float(series.iloc[-1]) - float(series.iloc[0])) / float(series.iloc[0])) * 100
                     result[etf_to_sector[etf]] = round(pct, 2)
             except Exception:
