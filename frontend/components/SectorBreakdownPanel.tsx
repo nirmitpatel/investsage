@@ -1,5 +1,7 @@
 'use client'
 
+import { useState } from 'react'
+
 export interface SectorBreakdownItem {
   sector: string
   value: number
@@ -27,7 +29,8 @@ function TrendBadge({ pct }: { pct: number }) {
   )
 }
 
-function DonutChart({ breakdown }: { breakdown: SectorBreakdownItem[] }) {
+function DonutChart({ breakdown, knownCount }: { breakdown: SectorBreakdownItem[]; knownCount: number }) {
+  const [hovered, setHovered] = useState<number | null>(null)
   const r = 58, cx = 80, cy = 80, sw = 22
   const circ = 2 * Math.PI * r
   const gap = 2.5
@@ -38,20 +41,50 @@ function DonutChart({ breakdown }: { breakdown: SectorBreakdownItem[] }) {
       dasharray: `${Math.max(0, arcLen - gap)} ${circ}`,
       dashoffset: -cumLen,
       color: getSectorColor(item.sector, i),
+      item,
     }
     cumLen += arcLen
     return seg
   })
+
+  const hoveredItem = hovered != null ? segments[hovered]?.item : null
+
   return (
-    <svg width="160" height="160" className="-rotate-90" style={{ minWidth: 160 }}>
-      <circle cx={cx} cy={cy} r={r} fill="none" stroke="#151520" strokeWidth={sw} />
-      {segments.map((seg, i) => (
-        <circle key={i} cx={cx} cy={cy} r={r} fill="none"
-          stroke={seg.color} strokeWidth={sw}
-          strokeDasharray={seg.dasharray} strokeDashoffset={seg.dashoffset}
-        />
-      ))}
-    </svg>
+    <div className="relative shrink-0" style={{ width: 160, height: 160 }}>
+      <svg width="160" height="160" className="-rotate-90" style={{ minWidth: 160 }}>
+        <circle cx={cx} cy={cy} r={r} fill="none" stroke="#151520" strokeWidth={sw} />
+        {segments.map((seg, i) => (
+          <circle key={i} cx={cx} cy={cy} r={r} fill="none"
+            stroke={seg.color} strokeWidth={sw}
+            strokeDasharray={seg.dasharray} strokeDashoffset={seg.dashoffset}
+            strokeOpacity={hovered == null || hovered === i ? 1 : 0.25}
+            style={{ cursor: 'pointer', transition: 'stroke-opacity 0.15s' }}
+            onMouseEnter={() => setHovered(i)}
+            onMouseLeave={() => setHovered(null)}
+          />
+        ))}
+      </svg>
+      <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none text-center px-2">
+        {hoveredItem ? (
+          <>
+            <span className="text-[11px] font-semibold text-white leading-tight line-clamp-2">
+              {hoveredItem.sector === 'Other' ? 'Other' : hoveredItem.sector}
+            </span>
+            <span className="text-base font-bold text-white mt-0.5">{hoveredItem.pct}%</span>
+            {hoveredItem.market_trend != null && hoveredItem.sector !== 'Other' && (
+              <span className={`text-[10px] font-semibold mt-0.5 ${hoveredItem.market_trend >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>
+                {hoveredItem.market_trend >= 0 ? '+' : ''}{hoveredItem.market_trend.toFixed(1)}%
+              </span>
+            )}
+          </>
+        ) : (
+          <>
+            <span className="text-xl font-bold text-white">{knownCount}</span>
+            <span className="text-[10px] text-gray-500 uppercase tracking-wide">sectors</span>
+          </>
+        )}
+      </div>
+    </div>
   )
 }
 
@@ -80,34 +113,32 @@ export default function SectorBreakdownPanel({ breakdown, period }: { breakdown:
         </p>
       </div>
       <div className="flex gap-8 items-center">
-        <div className="relative shrink-0">
-          <DonutChart breakdown={ordered} />
-          <div className="absolute inset-0 flex flex-col items-center justify-center">
-            <span className="text-xl font-bold text-white">{knownSectors.length}</span>
-            <span className="text-[10px] text-gray-500 uppercase tracking-wide">sectors</span>
-          </div>
-        </div>
+        <DonutChart breakdown={ordered} knownCount={knownSectors.length} />
         <div className="flex-1 min-w-0">
-          <div className="grid" style={{ gridTemplateColumns: '10px 1fr auto auto', columnGap: '12px', rowGap: '2px' }}>
-            <span />
-            <span className="text-[10px] text-gray-600 uppercase tracking-wider pb-2">Sector</span>
-            {hasTrends && period
-              ? <span className="text-[10px] text-gray-600 uppercase tracking-wider pb-2 text-right">{period}</span>
-              : <span />}
-            <span className="text-[10px] text-gray-600 uppercase tracking-wider pb-2 text-right">Alloc.</span>
+          <div className="flex items-center px-2 pb-1.5 mb-0.5">
+            <span className="w-3 shrink-0" />
+            <span className="text-[10px] text-gray-600 uppercase tracking-wider flex-1 ml-2">Sector</span>
+            {hasTrends && period && (
+              <span className="text-[10px] text-gray-600 uppercase tracking-wider mr-3">{period}</span>
+            )}
+            <span className="text-[10px] text-gray-600 uppercase tracking-wider w-12 text-right">Alloc.</span>
+          </div>
+          <div className="space-y-0.5">
             {ordered.map((item, i) => {
               const color = getSectorColor(item.sector, i)
               const isOther = item.sector === 'Other'
               return (
-                <div key={item.sector} className="contents">
-                  <span className="w-2.5 h-2.5 rounded-sm mt-[7px] shrink-0 self-start" style={{ background: color }} />
-                  <span className={`text-sm truncate py-1 ${isOther ? 'text-gray-600' : 'text-gray-300'}`}>
+                <div key={item.sector} className={`flex items-center gap-2 px-2 py-1.5 rounded-lg ${i % 2 === 0 ? 'bg-white/[0.02]' : ''}`}>
+                  <span className="w-2.5 h-2.5 rounded-sm shrink-0" style={{ background: color }} />
+                  <span className={`text-sm flex-1 min-w-0 truncate ${isOther ? 'text-gray-600' : 'text-gray-300'}`}>
                     {isOther ? 'Other (funds)' : item.sector}
                   </span>
-                  <span className="py-1 flex items-center justify-end">
-                    {item.market_trend != null && !isOther ? <TrendBadge pct={item.market_trend} /> : null}
-                  </span>
-                  <span className={`text-sm font-semibold tabular-nums text-right py-1 ${isOther ? 'text-gray-600' : 'text-white'}`}>
+                  {hasTrends && (
+                    <span className="shrink-0">
+                      {item.market_trend != null && !isOther ? <TrendBadge pct={item.market_trend} /> : <span className="w-10 inline-block" />}
+                    </span>
+                  )}
+                  <span className={`text-sm font-semibold tabular-nums w-12 text-right shrink-0 ${isOther ? 'text-gray-600' : 'text-white'}`}>
                     {item.pct}%
                   </span>
                 </div>

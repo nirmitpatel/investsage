@@ -14,8 +14,9 @@ logging.getLogger("yfinance").setLevel(logging.CRITICAL)
 BATCH_SIZE = 10  # Yahoo Finance tolerates ~10 tickers per request reliably
 
 
-def _fetch_prices_batch(symbols: List[str]) -> Dict[str, float]:
-    """Fetch prices for up to BATCH_SIZE symbols at once."""
+def _fetch_prices_batch(symbols: List[str]) -> Dict[str, Dict[str, Optional[float]]]:
+    """Fetch current price and previous close for up to BATCH_SIZE symbols.
+    Returns {symbol: {"price": float, "prev_close": float | None}}"""
     if not symbols:
         return {}
     try:
@@ -23,12 +24,15 @@ def _fetch_prices_batch(symbols: List[str]) -> Dict[str, float]:
         if data.empty:
             return {}
         close = data["Close"] if "Close" in data.columns else data
-        prices: Dict[str, float] = {}
+        result: Dict[str, Dict[str, Optional[float]]] = {}
         if len(symbols) == 1:
-            # Single ticker — close is a Series, not a DataFrame
             sym = symbols[0]
             try:
-                prices[sym] = round(float(close.dropna().iloc[-1]), 4)
+                series = close.dropna()
+                result[sym] = {
+                    "price": round(float(series.iloc[-1]), 4),
+                    "prev_close": round(float(series.iloc[-2]), 4) if len(series) >= 2 else None,
+                }
             except Exception:
                 pass
         else:
@@ -36,24 +40,41 @@ def _fetch_prices_batch(symbols: List[str]) -> Dict[str, float]:
                 try:
                     col = close[sym] if sym in close.columns else None
                     if col is not None:
-                        prices[sym] = round(float(col.dropna().iloc[-1]), 4)
+                        series = col.dropna()
+                        result[sym] = {
+                            "price": round(float(series.iloc[-1]), 4),
+                            "prev_close": round(float(series.iloc[-2]), 4) if len(series) >= 2 else None,
+                        }
                 except Exception:
                     pass
-        return prices
+        return result
     except Exception:
         return {}
 
 
 def fetch_prices(symbols: List[str]) -> Dict[str, float]:
-    """Fetch prices for all symbols in batches to avoid rate limits."""
+    """Fetch current prices for all symbols in batches."""
     all_prices: Dict[str, float] = {}
     for i in range(0, len(symbols), BATCH_SIZE):
         batch = symbols[i: i + BATCH_SIZE]
-        prices = _fetch_prices_batch(batch)
-        all_prices.update(prices)
+        batch_result = _fetch_prices_batch(batch)
+        for sym, data in batch_result.items():
+            if data.get("price") is not None:
+                all_prices[sym] = data["price"]
         if i + BATCH_SIZE < len(symbols):
-            time.sleep(0.5)  # brief pause between batches
+            time.sleep(0.5)
     return all_prices
+
+
+def fetch_prices_with_prev_close(symbols: List[str]) -> Dict[str, Dict[str, Optional[float]]]:
+    """Fetch current price and previous close for all symbols in batches."""
+    all_data: Dict[str, Dict[str, Optional[float]]] = {}
+    for i in range(0, len(symbols), BATCH_SIZE):
+        batch = symbols[i: i + BATCH_SIZE]
+        all_data.update(_fetch_prices_batch(batch))
+        if i + BATCH_SIZE < len(symbols):
+            time.sleep(0.5)
+    return all_data
 
 
 FUND_SECTOR_NAME_MAP = {
@@ -260,15 +281,16 @@ def fetch_fund_sector_weightings(symbols: List[str]) -> Dict[str, Dict[str, floa
 
 def _enrich_sync(positions: List[Dict[str, Any]], include_sectors: bool = False) -> List[Dict[str, Any]]:
     symbols = [p["symbol"] for p in positions if p.get("symbol")]
-    prices = fetch_prices(symbols)
+    price_data = fetch_prices_with_prev_close(symbols)
     sectors = fetch_sectors(symbols) if include_sectors else {}
 
     for position in positions:
         symbol = position.get("symbol")
         if not symbol:
             continue
+        pdata = price_data.get(symbol, {})
         # Use live price if we got one, otherwise keep price already on the position (from CSV)
-        price = prices.get(symbol) or position.get("current_price")
+        price = pdata.get("price") or position.get("current_price")
         if price:
             position["current_price"] = price
             shares = position.get("total_shares")
@@ -280,6 +302,8 @@ def _enrich_sync(positions: List[Dict[str, Any]], include_sectors: bool = False)
                 position["total_gain_loss_percent"] = round(
                     ((current_val - cost_basis) / cost_basis) * 100, 2
                 )
+        if pdata.get("prev_close") is not None:
+            position["previous_close"] = pdata["prev_close"]
         if symbol in sectors:
             position["sector"] = sectors[symbol]
 

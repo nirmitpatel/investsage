@@ -9,7 +9,7 @@ import logging
 from datetime import datetime, timezone, time as dtime
 from zoneinfo import ZoneInfo
 
-from services.market_data.yfinance_client import fetch_prices
+from services.market_data.yfinance_client import fetch_prices_with_prev_close
 from services.db.supabase_client import get_supabase
 
 log = logging.getLogger(__name__)
@@ -39,19 +39,22 @@ def _refresh_prices_sync(user_id: str | None = None) -> int:
         return 0
 
     symbols = list({p["symbol"] for p in positions if p.get("symbol")})
-    prices = fetch_prices(symbols)
-    if not prices:
+    price_data = fetch_prices_with_prev_close(symbols)
+    if not price_data:
         return 0
 
     updated = 0
     for p in positions:
         symbol = p.get("symbol")
-        price = prices.get(symbol)
+        pdata = price_data.get(symbol, {})
+        price = pdata.get("price")
         if not price:
             continue
         shares = p.get("total_shares")
         cost_basis = p.get("total_cost_basis")
         update: dict = {"current_price": price}
+        if pdata.get("prev_close") is not None:
+            update["previous_close"] = pdata["prev_close"]
         if shares and cost_basis:
             current_val = round(shares * price, 4)
             update["current_value"] = current_val

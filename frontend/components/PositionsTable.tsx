@@ -13,6 +13,7 @@ export interface Position {
   total_gain_loss_percent: number | null
   percent_of_account: number | null
   sector: string | null
+  previous_close: number | null
 }
 
 function fmt(n: number | null, prefix = '') {
@@ -123,11 +124,12 @@ interface Props {
   positions: Position[]
   loadingRec: Record<string, boolean>
   recommendations: Record<string, any>
+  recErrors: Record<string, string>
   onGetRecommendation: (symbol: string) => void
   onImportClick: () => void
 }
 
-export default function PositionsTable({ positions, loadingRec, recommendations, onGetRecommendation, onImportClick }: Props) {
+export default function PositionsTable({ positions, loadingRec, recommendations, recErrors, onGetRecommendation, onImportClick }: Props) {
   const [loadingAll, setLoadingAll] = useState(false)
 
   if (positions.length === 0) {
@@ -194,7 +196,7 @@ export default function PositionsTable({ positions, loadingRec, recommendations,
         <table className="w-full min-w-[700px] text-sm">
           <thead>
             <tr className="border-b border-white/[0.06]">
-              {['Symbol', 'Sector', 'Shares', 'Price', 'Value', 'Cost Basis', 'Gain / Loss', '%', 'AI'].map((h, i) => (
+              {['Symbol', 'Sector', 'Shares', 'Price', 'Value', 'Cost Basis', 'Gain / Loss', '%', 'Day', 'AI'].map((h, i) => (
                 <th key={h} className={`px-5 py-3.5 text-xs font-medium text-gray-500 uppercase tracking-wider ${i < 2 ? 'text-left' : 'text-right'}`}>{h}</th>
               ))}
             </tr>
@@ -235,10 +237,39 @@ export default function PositionsTable({ positions, loadingRec, recommendations,
                   ) : '—'}
                 </td>
                 <td className="px-5 py-4 text-right">
+                  {(() => {
+                    const { current_price, previous_close, total_shares } = p
+                    if (current_price == null || previous_close == null) return <span className="text-gray-700">—</span>
+                    const dayPct = ((current_price - previous_close) / previous_close) * 100
+                    const dayDollar = total_shares != null ? (current_price - previous_close) * total_shares : null
+                    const pos = dayPct >= 0
+                    return (
+                      <div className="flex flex-col items-end gap-0.5">
+                        <span className={`text-xs font-semibold ${pos ? 'text-emerald-400' : 'text-red-400'}`}>
+                          {pos ? '+' : ''}{dayPct.toFixed(2)}%
+                        </span>
+                        {dayDollar != null && (
+                          <span className={`text-[11px] ${pos ? 'text-emerald-500/70' : 'text-red-500/70'}`}>
+                            {pos ? '+$' : '−$'}{Math.abs(dayDollar).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                          </span>
+                        )}
+                      </div>
+                    )
+                  })()}
+                </td>
+                <td className="px-5 py-4 text-right">
                   {loadingRec[p.symbol] ? (
                     <span className="inline-flex justify-center w-full"><Spinner /></span>
                   ) : recommendations[p.symbol] ? (
                     <RecBadge rec={recommendations[p.symbol]} />
+                  ) : recErrors[p.symbol] ? (
+                    <button
+                      onClick={() => onGetRecommendation(p.symbol)}
+                      title={recErrors[p.symbol]}
+                      className="text-xs text-red-400 hover:text-red-300 border border-red-500/20 hover:border-red-500/40 px-2.5 py-1 rounded-lg transition"
+                    >
+                      Retry
+                    </button>
                   ) : (
                     <button
                       onClick={() => onGetRecommendation(p.symbol)}

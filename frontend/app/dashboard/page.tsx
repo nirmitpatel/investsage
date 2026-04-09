@@ -178,6 +178,7 @@ export default function Dashboard() {
   const [savingStyle, setSavingStyle] = useState(false)
   const [recommendations, setRecommendations] = useState<Record<string, any>>({})
   const [loadingRec, setLoadingRec] = useState<Record<string, boolean>>({})
+  const [recErrors, setRecErrors] = useState<Record<string, string>>({})
 
   const positionsRef = useRef<HTMLInputElement>(null)
   const transactionsRef = useRef<HTMLInputElement>(null)
@@ -226,6 +227,7 @@ export default function Dashboard() {
   async function handleGetRecommendation(symbol: string) {
     if (recommendations[symbol]) return
     setLoadingRec(r => ({ ...r, [symbol]: true }))
+    setRecErrors(e => { const next = { ...e }; delete next[symbol]; return next })
     const token = await getToken()
     if (!token) return
     try {
@@ -233,8 +235,16 @@ export default function Dashboard() {
         method: 'POST',
         headers: { Authorization: `Bearer ${token}` },
       })
-      if (res.ok) { const data = await res.json(); setRecommendations(r => ({ ...r, [symbol]: data })) }
-    } catch {}
+      if (res.ok) {
+        const data = await res.json()
+        setRecommendations(r => ({ ...r, [symbol]: data }))
+      } else {
+        const err = await res.json().catch(() => ({}))
+        setRecErrors(e => ({ ...e, [symbol]: err.detail ?? 'AI request failed' }))
+      }
+    } catch {
+      setRecErrors(e => ({ ...e, [symbol]: 'Network error' }))
+    }
     setLoadingRec(r => ({ ...r, [symbol]: false }))
   }
 
@@ -534,6 +544,7 @@ export default function Dashboard() {
               positions={positions}
               loadingRec={loadingRec}
               recommendations={recommendations}
+              recErrors={recErrors}
               onGetRecommendation={handleGetRecommendation}
               onImportClick={() => setShowImport(true)}
             />

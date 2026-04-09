@@ -27,8 +27,10 @@ CREATE TABLE positions (
   total_gain_loss_percent DECIMAL(8,4),
   percent_of_account DECIMAL(6,4),
   sector VARCHAR(50),
+  previous_close DECIMAL(15,4),
   last_updated TIMESTAMP DEFAULT NOW()
 );
+-- Migration (run if schema already applied): ALTER TABLE positions ADD COLUMN IF NOT EXISTS previous_close DECIMAL(15,4);
 
 -- tax_lots: reconstructed from transaction history (FIFO)
 CREATE TABLE tax_lots (
