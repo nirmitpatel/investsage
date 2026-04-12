@@ -6,3 +6,4 @@ supabase==2.9.1
 anthropic==0.18.0
 yfinance>=1.0.0
 python-multipart==0.0.6
+pypdf>=4.0.0

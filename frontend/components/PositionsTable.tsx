@@ -31,6 +31,21 @@ function gainBg(n: number | null) {
   return n >= 0 ? 'bg-emerald-500/10 text-emerald-400' : 'bg-red-500/10 text-red-400'
 }
 
+function NoCostBasis() {
+  return (
+    <span
+      className="inline-flex items-center gap-1 text-gray-600 cursor-default"
+      title="Upload a transactions CSV to calculate cost basis and gain/loss"
+    >
+      <span>—</span>
+      <svg className="w-3 h-3 text-gray-600 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+        <circle cx="12" cy="12" r="10" />
+        <path strokeLinecap="round" strokeLinejoin="round" d="M12 16v-4m0-4h.01" />
+      </svg>
+    </span>
+  )
+}
+
 function Spinner({ small }: { small?: boolean }) {
   const cls = small ? 'h-3 w-3' : 'h-4 w-4'
   return (
@@ -223,18 +238,20 @@ export default function PositionsTable({ positions, loadingRec, recommendations,
                 <td className="px-5 py-4 text-right text-gray-300">{p.total_shares ?? '—'}</td>
                 <td className="px-5 py-4 text-right text-gray-300">{fmt(p.current_price, '$')}</td>
                 <td className="px-5 py-4 text-right font-semibold text-white">{fmt(p.current_value, '$')}</td>
-                <td className="px-5 py-4 text-right text-gray-500">{fmt(p.total_cost_basis, '$')}</td>
+                <td className="px-5 py-4 text-right text-gray-500">
+                  {p.total_cost_basis != null ? fmt(p.total_cost_basis, '$') : <NoCostBasis />}
+                </td>
                 <td className={`px-5 py-4 text-right font-medium ${gainColor(p.total_gain_loss)}`}>
                   {p.total_gain_loss != null
                     ? (p.total_gain_loss >= 0 ? '+$' : '−$') + Math.abs(p.total_gain_loss).toLocaleString('en-US', { minimumFractionDigits: 2 })
-                    : '—'}
+                    : <span className="text-gray-700">—</span>}
                 </td>
                 <td className="px-5 py-4 text-right">
                   {p.total_gain_loss_percent != null ? (
                     <span className={`text-xs px-2 py-1 rounded-lg font-medium ${gainBg(p.total_gain_loss_percent)}`}>
                       {p.total_gain_loss_percent >= 0 ? '+' : ''}{p.total_gain_loss_percent.toFixed(2)}%
                     </span>
-                  ) : '—'}
+                  ) : <span className="text-gray-700">—</span>}
                 </td>
                 <td className="px-5 py-4 text-right">
                   {(() => {

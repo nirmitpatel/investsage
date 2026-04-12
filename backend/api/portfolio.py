@@ -19,6 +19,7 @@ from services.db.supabase_client import (
     get_positions,
     replace_tax_lots,
     update_portfolio_style,
+    patch_positions_cost_basis,
 )
 from services.health_score import calculate_health_score
 from dependencies import get_current_user
@@ -91,7 +92,8 @@ async def update_investment_style(
     return {"investment_style": body.investment_style, "health": health}
 
 
-MAX_CSV_BYTES = 5 * 1024 * 1024  # 5 MB
+MAX_CSV_BYTES = 5 * 1024 * 1024   # 5 MB
+MAX_PDF_BYTES = 10 * 1024 * 1024  # 10 MB
 
 
 @router.post("/import/positions")
@@ -169,6 +171,65 @@ async def import_transactions(
         "brokerage": brokerage,
         "tax_lots_reconstructed": len(lots),
         "transactions": transactions,
+    }
+
+
+@router.post("/import/performance-pdf")
+async def import_performance_pdf(
+    file: UploadFile = File(...),
+    user_id: str = Depends(get_current_user),
+):
+    """
+    Accept a Vanguard Performance Report PDF and use it to populate cost basis
+    for positions that lacked full transaction history in the CSV export.
+
+    The PDF's "Total" row gives the cumulative deposits since account inception,
+    which equals total cost basis when the account started at $0. That total is
+    then distributed across existing positions: money market funds get
+    cost_basis = current_value (stable $1 NAV); all other positions receive
+    a proportional share of the remaining cost by current market value.
+
+    Positions must already exist (upload the CSV first).
+    """
+    if not file.filename.lower().endswith(".pdf"):
+        raise HTTPException(status_code=400, detail="File must be a PDF")
+
+    content = await file.read(MAX_PDF_BYTES + 1)
+    if len(content) > MAX_PDF_BYTES:
+        raise HTTPException(status_code=413, detail="File too large — maximum size is 10 MB")
+
+    from services.pdf_parser.vanguard_performance import (
+        parse_vanguard_performance_pdf,
+        distribute_cost_basis,
+    )
+
+    try:
+        pdf_data = parse_vanguard_performance_pdf(content)
+    except ValueError as e:
+        raise HTTPException(status_code=422, detail=str(e))
+
+    portfolio = get_or_create_portfolio(user_id)
+    positions = get_positions(portfolio["id"])
+
+    if not positions:
+        raise HTTPException(
+            status_code=422,
+            detail="Upload your positions CSV first before supplementing with a performance PDF",
+        )
+
+    updates = distribute_cost_basis(positions, pdf_data["total_deposits"])
+    patch_positions_cost_basis(portfolio["id"], updates)
+
+    positions = get_positions(portfolio["id"])
+    health = await asyncio.to_thread(_build_health, positions, portfolio)
+
+    return {
+        "total_deposits": pdf_data["total_deposits"],
+        "total_investment_return": pdf_data["total_investment_return"],
+        "date_range": pdf_data.get("date_range"),
+        "positions_updated": len(updates),
+        "positions": positions,
+        "health": health,
     }
 
 

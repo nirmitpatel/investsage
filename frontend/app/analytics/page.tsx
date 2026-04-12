@@ -27,8 +27,8 @@ interface Analytics {
   empty: boolean
   summary?: {
     total_value: number
-    total_cost: number
-    total_gain_loss: number
+    total_cost: number | null
+    total_gain_loss: number | null
     total_return_pct: number | null
     position_count: number
   }
@@ -48,8 +48,17 @@ function fmt(n: number, prefix = '') {
   return prefix + n.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
 }
 
-function gainColor(n: number) { return n >= 0 ? 'text-emerald-400' : 'text-red-400' }
-function gainBg(n: number) { return n >= 0 ? 'bg-emerald-500/10 text-emerald-400' : 'bg-red-500/10 text-red-400' }
+function gainColor(n: number | null) { return n == null ? 'text-gray-500' : n >= 0 ? 'text-emerald-400' : 'text-red-400' }
+function gainBg(n: number | null) { return n == null ? 'bg-gray-800/50 text-gray-500' : n >= 0 ? 'bg-emerald-500/10 text-emerald-400' : 'bg-red-500/10 text-red-400' }
+
+function InfoIcon() {
+  return (
+    <svg className="w-3.5 h-3.5 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+      <circle cx="12" cy="12" r="10" />
+      <path strokeLinecap="round" strokeLinejoin="round" d="M12 16v-4m0-4h.01" />
+    </svg>
+  )
+}
 
 export default function AnalyticsPage() {
   const router = useRouter()
@@ -114,8 +123,18 @@ export default function AnalyticsPage() {
               {/* Summary row */}
               {data.summary && (
                 <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
-                  <StatCard label="Total Return" value={`${data.summary.total_gain_loss >= 0 ? '+' : ''}$${Math.abs(data.summary.total_gain_loss).toLocaleString('en-US', { minimumFractionDigits: 2 })}`} valueClass={gainColor(data.summary.total_gain_loss)} />
-                  <StatCard label="Return %" value={data.summary.total_return_pct != null ? `${data.summary.total_return_pct >= 0 ? '+' : ''}${data.summary.total_return_pct.toFixed(2)}%` : '—'} valueClass={data.summary.total_return_pct != null ? gainColor(data.summary.total_return_pct) : 'text-gray-400'} />
+                  <StatCard
+                    label="Total Return"
+                    value={data.summary.total_gain_loss != null ? `${data.summary.total_gain_loss >= 0 ? '+' : ''}$${Math.abs(data.summary.total_gain_loss).toLocaleString('en-US', { minimumFractionDigits: 2 })}` : null}
+                    valueClass={gainColor(data.summary.total_gain_loss)}
+                    infoTip="Upload a transactions CSV to calculate total return"
+                  />
+                  <StatCard
+                    label="Return %"
+                    value={data.summary.total_return_pct != null ? `${data.summary.total_return_pct >= 0 ? '+' : ''}${data.summary.total_return_pct.toFixed(2)}%` : null}
+                    valueClass={gainColor(data.summary.total_return_pct)}
+                    infoTip="Upload a transactions CSV to calculate return %"
+                  />
                   <StatCard label="Portfolio Value" value={`$${data.summary.total_value.toLocaleString('en-US', { maximumFractionDigits: 0 })}`} />
                   <StatCard label="Positions" value={String(data.summary.position_count)} />
                 </div>
@@ -241,11 +260,22 @@ function PerformersCard({ title, items, positive }: { title: string; items: Perf
   )
 }
 
-function StatCard({ label, value, valueClass = 'text-white' }: { label: string; value: string; valueClass?: string }) {
+function StatCard({ label, value, valueClass = 'text-white', infoTip }: { label: string; value: string | null; valueClass?: string; infoTip?: string }) {
   return (
     <div className="bg-white/[0.03] border border-white/[0.08] rounded-2xl p-5">
       <p className="text-xs text-gray-500 uppercase tracking-wider mb-2">{label}</p>
-      <p className={`text-2xl font-bold tracking-tight ${valueClass}`}>{value}</p>
+      {value != null ? (
+        <p className={`text-2xl font-bold tracking-tight ${valueClass}`}>{value}</p>
+      ) : (
+        <div className="flex items-center gap-1.5">
+          <p className="text-2xl font-bold tracking-tight text-gray-700">—</p>
+          {infoTip && (
+            <span className="inline-flex items-center gap-1 text-xs text-gray-600 mt-1" title={infoTip}>
+              <InfoIcon />
+            </span>
+          )}
+        </div>
+      )}
     </div>
   )
 }

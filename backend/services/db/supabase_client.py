@@ -99,3 +99,14 @@ def replace_tax_lots(user_id: str, lots: List[Dict[str, Any]]) -> None:
 def save_tax_lots(user_id: str, position_rows: List[Dict[str, Any]], lots: List[Dict[str, Any]]) -> None:
     """Legacy: Match lots to their saved positions by symbol, then insert."""
     replace_tax_lots(user_id, lots)
+
+
+def patch_positions_cost_basis(portfolio_id: str, updates: List[Dict[str, Any]]) -> None:
+    """Update cost basis and gain/loss fields for existing positions by symbol."""
+    sb = get_supabase()
+    for update in updates:
+        sb.table("positions").update({
+            "total_cost_basis": update["total_cost_basis"],
+            "total_gain_loss": update["total_gain_loss"],
+            "total_gain_loss_percent": update["total_gain_loss_percent"],
+        }).eq("portfolio_id", portfolio_id).eq("symbol", update["symbol"]).execute()

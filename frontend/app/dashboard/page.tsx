@@ -166,7 +166,7 @@ export default function Dashboard() {
   const [portfolio, setPortfolio] = useState<Portfolio | null>(null)
   const [positions, setPositions] = useState<Position[]>([])
   const [health, setHealth] = useState<Health | null>(null)
-  const [uploading, setUploading] = useState<'positions' | 'transactions' | null>(null)
+  const [uploading, setUploading] = useState<'positions' | 'transactions' | 'performance-pdf' | null>(null)
   const [uploadStep, setUploadStep] = useState('')
   const [uploadMsg, setUploadMsg] = useState('')
   const [uploadError, setUploadError] = useState(false)
@@ -183,6 +183,7 @@ export default function Dashboard() {
 
   const positionsRef = useRef<HTMLInputElement>(null)
   const transactionsRef = useRef<HTMLInputElement>(null)
+  const pdfRef = useRef<HTMLInputElement>(null)
 
   useEffect(() => { loadPortfolio() }, [])
 
@@ -298,6 +299,34 @@ export default function Dashboard() {
         const brokerageLabel = data.brokerage ? ` from ${data.brokerage}` : ''
         setUploadMsg(`Imported ${data.imported} transactions${brokerageLabel} · ${data.tax_lots_reconstructed} tax lots reconstructed`)
       }
+    } else {
+      const err = await res.json().catch(() => ({}))
+      setUploadMsg(err.detail ?? 'Upload failed')
+      setUploadError(true)
+    }
+  }
+
+  async function handlePerformancePdf(file: File) {
+    setUploading('performance-pdf')
+    setUploadMsg('')
+    setUploadError(false)
+    const token = await getToken()
+    if (!token) { router.push('/login'); return }
+    const form = new FormData()
+    form.append('file', file)
+    const res = await fetch(`${API}/api/v1/portfolio/import/performance-pdf`, {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${token}` },
+      body: form,
+    })
+    setUploading(null)
+    if (res.ok) {
+      const data = await res.json()
+      setPositions(data.positions ?? [])
+      setHealth(data.health ?? null)
+      const ret = data.total_investment_return
+      const retStr = ret != null ? ` · +$${ret.toLocaleString('en-US', { minimumFractionDigits: 2 })} total return` : ''
+      setUploadMsg(`Cost basis updated from performance report${retStr}`)
     } else {
       const err = await res.json().catch(() => ({}))
       setUploadMsg(err.detail ?? 'Upload failed')
@@ -440,6 +469,21 @@ export default function Dashboard() {
                 onChange={(e) => e.target.files?.[0] && handleUpload('positions', e.target.files[0])} />
               <input ref={transactionsRef} type="file" accept=".csv" className="hidden"
                 onChange={(e) => e.target.files?.[0] && handleUpload('transactions', e.target.files[0])} />
+              <input ref={pdfRef} type="file" accept=".pdf" className="hidden"
+                onChange={(e) => e.target.files?.[0] && handlePerformancePdf(e.target.files[0])} />
+              {selectedBrokerage === 'Vanguard' && (
+                <div className="mt-4 pt-4 border-t border-white/[0.06]">
+                  <p className="text-xs text-gray-500 mb-3">
+                    CSV history incomplete? Upload your Vanguard Performance Report (PDF) to fill in cost basis from account inception.
+                  </p>
+                  <button onClick={() => pdfRef.current?.click()} disabled={uploading !== null}
+                    className="flex items-center gap-2 bg-white/[0.06] hover:bg-white/[0.09] border border-white/[0.08] disabled:opacity-40 disabled:cursor-not-allowed px-5 py-2.5 rounded-xl text-sm font-medium transition"
+                  >
+                    {uploading === 'performance-pdf' ? <Spinner /> : <UploadIcon />}
+                    {uploading === 'performance-pdf' ? 'Processing…' : 'Upload Performance Report PDF'}
+                  </button>
+                </div>
+              )}
               {uploading === 'positions' && (
                 <div className="mt-4 space-y-2">
                   {(['Parsing CSV…', 'Fetching prices…', 'Fetching sectors…', 'Calculating health score…', 'Almost done…'] as const).map((label) => {
@@ -478,14 +522,27 @@ export default function Dashboard() {
             <div className="bg-white/[0.03] border border-white/[0.08] rounded-2xl p-6">
               <p className="text-xs text-gray-500 uppercase tracking-wider mb-3">Total Return</p>
               {health ? (
-                <>
-                  <p className={`text-3xl font-bold tracking-tight ${gainColor(gainLoss)}`}>
-                    {gainLoss != null ? (gainLoss >= 0 ? '+' : '−') : ''}${gainLossAbs != null ? gainLossAbs.toLocaleString('en-US', { minimumFractionDigits: 2 }) : '—'}
-                  </p>
-                  <span className={`inline-block mt-2 text-xs px-2 py-0.5 rounded-full font-medium ${gainBg(gainLoss)}`}>
-                    {gainLoss != null && gainLoss >= 0 ? 'All time gain' : 'All time loss'}
-                  </span>
-                </>
+                gainLoss != null ? (
+                  <>
+                    <p className={`text-3xl font-bold tracking-tight ${gainColor(gainLoss)}`}>
+                      {gainLoss >= 0 ? '+' : '−'}${gainLossAbs!.toLocaleString('en-US', { minimumFractionDigits: 2 })}
+                    </p>
+                    <span className={`inline-block mt-2 text-xs px-2 py-0.5 rounded-full font-medium ${gainBg(gainLoss)}`}>
+                      {gainLoss >= 0 ? 'All time gain' : 'All time loss'}
+                    </span>
+                  </>
+                ) : (
+                  <>
+                    <p className="text-3xl font-bold text-gray-700">—</p>
+                    <span className="inline-flex items-center gap-1 mt-2 text-xs text-gray-600">
+                      <svg className="w-3.5 h-3.5 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                        <circle cx="12" cy="12" r="10" />
+                        <path strokeLinecap="round" strokeLinejoin="round" d="M12 16v-4m0-4h.01" />
+                      </svg>
+                      Upload transactions CSV to calculate
+                    </span>
+                  </>
+                )
               ) : <p className="text-3xl font-bold text-gray-700">—</p>}
             </div>
             <div className="bg-white/[0.03] border border-white/[0.08] rounded-2xl p-6">
