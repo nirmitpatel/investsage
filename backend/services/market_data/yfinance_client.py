@@ -20,7 +20,7 @@ def _fetch_prices_batch(symbols: List[str]) -> Dict[str, Dict[str, Optional[floa
     if not symbols:
         return {}
     try:
-        data = yf.download(symbols, period="2d", auto_adjust=True, progress=False, threads=False)
+        data = yf.download(symbols, period="5d", auto_adjust=True, progress=False, threads=False)
         if data.empty:
             return {}
         close = data["Close"] if "Close" in data.columns else data

@@ -1,14 +1,11 @@
-from fastapi import APIRouter, UploadFile, File, HTTPException, Depends, BackgroundTasks
+from fastapi import APIRouter, UploadFile, File, HTTPException, Depends, BackgroundTasks, Query
 from datetime import datetime, timezone
 from pydantic import BaseModel
 from typing import Optional
 import asyncio
 
-from services.csv_parser.fidelity import (
-    parse_fidelity_positions,
-    parse_fidelity_transactions,
-    reconstruct_tax_lots,
-)
+from services.csv_parser import parse_positions, parse_transactions
+from services.csv_parser.fidelity import reconstruct_tax_lots
 from services.market_data.yfinance_client import (
     enrich_positions_with_prices,
     fetch_sectors,
@@ -101,6 +98,7 @@ MAX_CSV_BYTES = 5 * 1024 * 1024  # 5 MB
 async def import_positions(
     file: UploadFile = File(...),
     background_tasks: BackgroundTasks = None,
+    brokerage: Optional[str] = Query(default=None),
     user_id: str = Depends(get_current_user),
 ):
     if not file.filename.endswith(".csv"):
@@ -111,7 +109,11 @@ async def import_positions(
         raise HTTPException(status_code=413, detail="File too large — maximum size is 5 MB")
     text = content.decode("utf-8")
 
-    positions = parse_fidelity_positions(text)
+    try:
+        positions, brokerage = parse_positions(text, brokerage)
+    except ValueError as e:
+        raise HTTPException(status_code=422, detail=str(e))
+
     positions = await enrich_positions_with_prices(positions, include_sectors=True)
 
     portfolio = get_or_create_portfolio(user_id)
@@ -125,6 +127,7 @@ async def import_positions(
 
     return {
         "imported": len(positions),
+        "brokerage": brokerage,
         "positions": positions,
         "health": health,
     }
@@ -133,6 +136,7 @@ async def import_positions(
 @router.post("/import/transactions")
 async def import_transactions(
     file: UploadFile = File(...),
+    brokerage: Optional[str] = Query(default=None),
     user_id: str = Depends(get_current_user),
 ):
     if not file.filename.endswith(".csv"):
@@ -143,13 +147,18 @@ async def import_transactions(
         raise HTTPException(status_code=413, detail="File too large — maximum size is 5 MB")
     text = content.decode("utf-8")
 
-    transactions = parse_fidelity_transactions(text)
+    try:
+        transactions, brokerage = parse_transactions(text, brokerage)
+    except ValueError as e:
+        raise HTTPException(status_code=422, detail=str(e))
+
     lots = reconstruct_tax_lots(transactions)
 
     replace_tax_lots(user_id, lots)
 
     return {
         "imported": len(transactions),
+        "brokerage": brokerage,
         "tax_lots_reconstructed": len(lots),
         "transactions": transactions,
     }

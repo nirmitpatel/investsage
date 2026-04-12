@@ -1,64 +1,29 @@
 # InvestSage — Next Steps
 
-_Say "execute next" to run the top unchecked item. This file is updated after every completed or discovered task._
-
----
-
-## P0 — Blockers (must fix before sharing)
-
-- [x] Error/loading states on tax, insights, analytics pages — retry cards matching dashboard
-- [x] Analytics page empty state — prompt to import when no positions
-- [x] **Verify Railway deployment** — confirm `POST /api/v1/ai/position/{symbol}/recommend` and `GET /api/v1/analytics` are live; trigger manual redeploy if needed
-- [x] **Fix AI recommendation parsing** — strip markdown code fences from Claude response before JSON.loads; fix fallback that hardcodes `HOLD` even when Claude's text says SELL
-- [x] **Fix Ask AI tooltip** — replace `title` attribute (shows raw JSON) with a proper popover showing reasoning + key factors
-- [x] **Clear stale recs on style change** — `handleSelectStyle` never calls `setRecommendations({})`; old Buy/Hold/Sell badges persist after mode switch
-- [x] **Fix sector donut color mismatch** — DonutChart renders `breakdown[]` order but legend renders `ordered[]` (Other moved to end); indices drift when Other is mid-array, causing dot/segment color mismatch
-- [x] **Ask AI never recommends BUY** — the `/recommend` prompt only receives static snapshot data (gain %, value, sector) with no forward-looking signals; Claude has no basis to suggest buying more; enrich prompt with sector trend (from `market_trends`), whether position is underweight vs portfolio allocation, and investment style so it can reason about upside
-- [x] **Rec popover: hover instead of click** — requires two separate clicks (Ask AI → open popover); switch to hover/focus-triggered display with a short delay so the reasoning appears on mouseover without an extra click
-- [x] **Rec popover goes off-screen** — popover always opens downward; for positions near the bottom of the table it clips below the viewport; detect trigger position relative to viewport and flip upward when needed
-- [x] **Ask AI for all positions button** — no way to bulk-fetch; add a "Ask AI for all" button in the Positions table header that fires `/recommend` for every position sequentially with a small delay between calls to avoid hammering the API
-
----
-
-## P1 — Polish & UX
-
-- [x] **Session expiry handling** — 401 mid-session should redirect to `/login` with "Session expired" message (currently silent across all pages)
-- [x] **Mobile layout** — positions table overflows on phones; need horizontal scroll wrapper + responsive sidebar (hamburger or bottom nav)
-- [x] **Upload progress indicator** — positions import takes ~30s; add step labels ("Fetching prices… Fetching sectors…") to reduce abandonment
-- [x] **AI recommendation error state** — if `POST /recommend` fails in PositionsTable, button silently does nothing; show inline error
-- [x] **Long game trend period** — change from `2y` to `10y` in `STYLE_TREND_PERIOD`; yfinance supports it
-- [x] **Play it safe trend period** — change from `1y` to `3y`; update modal description to reflect "3–5 year stability focus" rather than short-term trends
-- [x] **Sector table readability** — color dot and name are misaligned when sector names are long; add dotted leader or row background stripe so the eye can track from name to allocation %
-- [x] **Sector donut hover tooltip** — static SVG today; add per-segment `onMouseEnter`/`onMouseLeave` with overlay showing sector name, allocation %, and trend
-- [x] **Per-day change column in positions table** — fetch `previousClose` via yfinance on price refresh; add "Day" column showing today's $ and % change per position
+_Say "execute next" to run the top unchecked item. Completed tasks are auto-stripped by hook._
 
 ---
 
 ## P2 — Features
 
-- [ ] **Multi-brokerage CSV support** — currently Fidelity only; add Schwab and Vanguard parsers (different column names/formats)
 - [ ] **Portfolio history snapshots** — store point-in-time snapshots to enable a value-over-time chart on analytics
 - [ ] **Email digest notifications** — weekly "your health score changed" or "new tax opportunity" email
 - [ ] **Shareable portfolio report** — one-click PDF or read-only shareable link for dashboard snapshot
-- [ ] **Mode-aware health scoring** — currently `market_trends` data is fetched but never used in scoring; penalize heavy allocation in sectors with negative trend for beat-the-market/play-it-safe; reward underweight allocation in outperforming sectors
-- [ ] **Capture account type from Fidelity CSV** — `Account Name/Number` column is parsed but discarded; detect `401k`, `Roth 401(k)`, `Individual`, `IRA` etc. from the value; store `account_type` on positions; use it to split personal vs retirement views
-- [ ] **Account-aware AI recommendations** — suppress Buy/Hold/Sell for 401k positions (can't freely trade plan funds); replace with rebalancing suggestions within available fund options
-- [ ] **401k retirement alignment scoring** — collect retirement year from user profile; compare actual 401k equity/bond split against expected glide path for that target year; surface as a dedicated health card separate from personal portfolio score
-- [ ] **Smart tax-loss harvest + reallocation** — when surfacing a harvest opportunity, cross-reference sector weight and trend: if sector is already overweight or underperforming, suggest redeploying proceeds into an underweight outperforming sector rather than buying a replacement in-kind; if sector is healthy and underweight, suggest a better-performing peer stock (e.g. MSFT instead of CRM) or a sector ETF for the 30-day wash-sale window, with clear explanation of why
-- [ ] **Brokerage-appropriate wash sale alternatives** — replace Vanguard-only ETF suggestions with Fidelity-native funds (FTEC, FHLC, FSKAX, etc.) or universal SPDR/iShares equivalents; detect brokerage from CSV account name
-- [ ] **AI Insights page overhaul** — pass investment style to Claude with mode-specific instructions (not just a label); expand page beyond one summary card — add action items section, per-sector commentary, and risk summary cards
-- [ ] **Analytics: clarify missing period comparisons** — 1-month and 1-year "Your Portfolio" rows are absent because no historical snapshots exist; add explanatory note and link to the snapshots feature
+- [ ] **Mode-aware health scoring** — `market_trends` data is fetched but never used in scoring; penalize heavy allocation in sectors with negative trend for beat-the-market/play-it-safe; reward underweight allocation in outperforming sectors
+- [ ] **Capture account type from Fidelity CSV** — `Account Name/Number` column is parsed but discarded; detect `401k`, `Roth 401(k)`, `Individual`, `IRA` etc.; store `account_type` on positions; use it to split personal vs retirement views
+- [ ] **Account-aware AI recommendations** — suppress Buy/Hold/Sell for 401k positions; replace with rebalancing suggestions within available fund options
+- [ ] **401k retirement alignment scoring** — collect retirement year from user profile; compare actual 401k equity/bond split against expected glide path; surface as a dedicated health card
+- [ ] **Smart tax-loss harvest + reallocation** — cross-reference sector weight and trend when surfacing harvest opportunities; suggest redeploying into underweight outperforming sectors or peer stocks; explain wash-sale window
+- [ ] **Brokerage-appropriate wash sale alternatives** — replace Vanguard-only ETF suggestions with Fidelity-native funds (FTEC, FHLC, FSKAX) or universal SPDR/iShares equivalents; detect brokerage from CSV account name
+- [ ] **AI Insights page overhaul** — pass investment style with mode-specific instructions; expand beyond one summary card — add action items, per-sector commentary, and risk summary cards
+- [ ] **Analytics: clarify missing period comparisons** — add explanatory note when 1-month/1-year portfolio rows are absent (no snapshots yet); link to snapshots feature
 
 ---
 
 ## P3 — Hardening
 
-- [x] **Fix price refresh scope** — `price_refresh.py:33` selects all positions with no user filter; background loop updates everyone's prices (fine), but the manual `/refresh-prices` endpoint calls the same function and returns only the requesting user's positions — scope the sync function to accept an optional `user_id` so the endpoint only rewrites that user's rows
-- [x] **CSV upload size limit** — `portfolio.py:116` reads the entire file into memory before validation; reject files over 5MB with a 413 before calling `file.read()`
-- [x] **Deduplicate `get_current_user()`** — identical function copy-pasted into `portfolio.py`, `tax.py`, `ai.py`, `analytics.py`; extract to `backend/dependencies.py` and import from there
-- [ ] **Persist AI recommendations to `recommendation_snapshots`** — table and schema already defined; write a row on every `/recommend` call so users can see recommendation history and track whether following advice paid off
-- [ ] **Drop unused schema tables** — `smart_money_trades` and `policy_events` were never built; remove from `schema.sql` and add a `DROP TABLE IF EXISTS` migration comment for anyone who applied the schema already
+- [ ] **Persist AI recommendations to `recommendation_snapshots`** — table and schema already defined; write a row on every `/recommend` call
+- [ ] **Drop unused schema tables** — `smart_money_trades` and `policy_events` were never built; remove from `schema.sql` and add a `DROP TABLE IF EXISTS` migration comment
 - [ ] **Rate limiting on AI endpoints** — `/analyze` and `/recommend` call Claude API; add per-user rate limits to control cost
 - [ ] **Backend error monitoring** — add Sentry (or similar) to Railway deployment for visibility into 500s
 - [ ] **`.env.local.example` audit** — ensure all required vars are documented for a clean local setup
-- [x] **Tests & end-to-end coverage** — backend: pytest unit tests for `health_score.py`, `tax_savings.py`, and CSV parser edge cases; frontend: Playwright e2e tests covering import flow, style switch, Ask AI, and sector breakdown rendering; add GitHub Actions CI that runs both suites on every push to master to catch regressions before they reach prod

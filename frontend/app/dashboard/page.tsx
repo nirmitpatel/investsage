@@ -170,6 +170,7 @@ export default function Dashboard() {
   const [uploadStep, setUploadStep] = useState('')
   const [uploadMsg, setUploadMsg] = useState('')
   const [uploadError, setUploadError] = useState(false)
+  const [selectedBrokerage, setSelectedBrokerage] = useState<string | null>(null)
   const [loadingPortfolio, setLoadingPortfolio] = useState(true)
   const [loadingError, setLoadingError] = useState(false)
   const [refreshing, setRefreshing] = useState(false)
@@ -276,7 +277,9 @@ export default function Dashboard() {
     if (!token) { router.push('/login'); return }
     const form = new FormData()
     form.append('file', file)
-    const res = await fetch(`${API}/api/v1/portfolio/import/${type}`, {
+    const url = new URL(`${API}/api/v1/portfolio/import/${type}`)
+    if (selectedBrokerage) url.searchParams.set('brokerage', selectedBrokerage)
+    const res = await fetch(url.toString(), {
       method: 'POST',
       headers: { Authorization: `Bearer ${token}` },
       body: form,
@@ -287,10 +290,12 @@ export default function Dashboard() {
       if (type === 'positions') {
         setPositions(data.positions ?? [])
         setHealth(data.health ?? null)
-        setUploadMsg(`Imported ${data.imported} positions`)
+        const brokerageLabel = data.brokerage ? ` from ${data.brokerage}` : ''
+        setUploadMsg(`Imported ${data.imported} positions${brokerageLabel}`)
         if (!portfolio?.investment_style) setShowStyleModal(true)
       } else {
-        setUploadMsg(`Imported ${data.imported} transactions · ${data.tax_lots_reconstructed} tax lots reconstructed`)
+        const brokerageLabel = data.brokerage ? ` from ${data.brokerage}` : ''
+        setUploadMsg(`Imported ${data.imported} transactions${brokerageLabel} · ${data.tax_lots_reconstructed} tax lots reconstructed`)
       }
     } else {
       const err = await res.json().catch(() => ({}))
@@ -385,23 +390,50 @@ export default function Dashboard() {
           {/* Import panel */}
           {showImport && (
             <div className="bg-white/[0.03] border border-white/[0.08] rounded-2xl p-6">
-              <h2 className="font-semibold mb-1">Import from Fidelity</h2>
-              <p className="text-gray-500 text-sm mb-5">
-                Accounts → Portfolio → Download (positions CSV) &nbsp;·&nbsp; History → Download (transactions CSV)
-              </p>
+              <h2 className="font-semibold mb-1">Import CSV</h2>
+              <p className="text-gray-500 text-sm mb-4 text-gray-500">Select your brokerage, then upload your CSV export.</p>
+
+              {/* Brokerage selector */}
+              <div className="flex gap-2 flex-wrap mb-5">
+                {(['Fidelity', 'Charles Schwab', 'Vanguard', 'Robinhood'] as const).map((b) => (
+                  <button
+                    key={b}
+                    onClick={() => setSelectedBrokerage(selectedBrokerage === b ? null : b)}
+                    className={`px-4 py-1.5 rounded-full text-sm font-medium border transition ${
+                      selectedBrokerage === b
+                        ? 'bg-violet-600 border-violet-500 text-white'
+                        : 'bg-white/[0.04] border-white/[0.08] text-gray-400 hover:text-white hover:border-white/20'
+                    }`}
+                  >
+                    {b}
+                  </button>
+                ))}
+              </div>
+
+              {selectedBrokerage === 'Robinhood' && (
+                <p className="text-xs text-amber-400/80 mb-4">
+                  Robinhood doesn&apos;t export a positions file — upload your account history CSV and positions will be reconstructed from your transaction history.
+                </p>
+              )}
+
               <div className="flex gap-3 flex-wrap">
-                <button onClick={() => positionsRef.current?.click()} disabled={uploading !== null}
-                  className="flex items-center gap-2 bg-violet-600 hover:bg-violet-500 disabled:opacity-50 px-5 py-2.5 rounded-xl text-sm font-medium transition shadow-lg shadow-violet-500/20"
+                <button onClick={() => positionsRef.current?.click()} disabled={uploading !== null || !selectedBrokerage}
+                  className="flex items-center gap-2 bg-violet-600 hover:bg-violet-500 disabled:opacity-40 disabled:cursor-not-allowed px-5 py-2.5 rounded-xl text-sm font-medium transition shadow-lg shadow-violet-500/20"
                 >
                   {uploading === 'positions' ? <Spinner /> : <UploadIcon />}
-                  {uploading === 'positions' ? uploadStep || 'Uploading…' : 'Upload Positions CSV'}
+                  {uploading === 'positions' ? uploadStep || 'Uploading…' : selectedBrokerage === 'Robinhood' ? 'Upload Account History CSV' : 'Upload Positions CSV'}
                 </button>
-                <button onClick={() => transactionsRef.current?.click()} disabled={uploading !== null}
-                  className="flex items-center gap-2 bg-white/[0.06] hover:bg-white/[0.09] border border-white/[0.08] disabled:opacity-50 px-5 py-2.5 rounded-xl text-sm font-medium transition"
-                >
-                  {uploading === 'transactions' ? <Spinner /> : <UploadIcon />}
-                  {uploading === 'transactions' ? 'Processing...' : 'Upload Transactions CSV'}
-                </button>
+                {selectedBrokerage !== 'Robinhood' && (
+                  <button onClick={() => transactionsRef.current?.click()} disabled={uploading !== null || !selectedBrokerage}
+                    className="flex items-center gap-2 bg-white/[0.06] hover:bg-white/[0.09] border border-white/[0.08] disabled:opacity-40 disabled:cursor-not-allowed px-5 py-2.5 rounded-xl text-sm font-medium transition"
+                  >
+                    {uploading === 'transactions' ? <Spinner /> : <UploadIcon />}
+                    {uploading === 'transactions' ? 'Processing...' : 'Upload Transactions CSV'}
+                  </button>
+                )}
+                {!selectedBrokerage && (
+                  <p className="self-center text-xs text-gray-600">Select a brokerage above to enable upload</p>
+                )}
               </div>
               <input ref={positionsRef} type="file" accept=".csv" className="hidden"
                 onChange={(e) => e.target.files?.[0] && handleUpload('positions', e.target.files[0])} />
