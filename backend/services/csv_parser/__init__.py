@@ -59,11 +59,14 @@ _BROKERAGE_ALIASES = {
 }
 
 
-def parse_positions(csv_text: str, brokerage: str | None = None) -> tuple[List[Dict[str, Any]], str]:
+def parse_positions(
+    csv_text: str, brokerage: str | None = None
+) -> tuple[List[Dict[str, Any]], str, List[Dict[str, Any]] | None]:
     """
     Parse positions CSV for the given brokerage (or auto-detect if not provided).
-    For Robinhood (transactions-only export), reconstructs positions from history.
-    Returns (positions, brokerage_name).
+    For Robinhood and Vanguard combined files, also returns parsed transactions
+    so the caller can save tax lots in the same request.
+    Returns (positions, brokerage_name, transactions_or_None).
     """
     if brokerage:
         brokerage = _BROKERAGE_ALIASES.get(brokerage.lower())
@@ -74,15 +77,21 @@ def parse_positions(csv_text: str, brokerage: str | None = None) -> tuple[List[D
     else:
         brokerage = detect_brokerage(csv_text)
     if brokerage == "fidelity":
-        return parse_fidelity_positions(csv_text), "Fidelity"
+        return parse_fidelity_positions(csv_text), "Fidelity", None
     elif brokerage == "schwab":
-        return parse_schwab_positions(csv_text), "Charles Schwab"
+        return parse_schwab_positions(csv_text), "Charles Schwab", None
     elif brokerage == "vanguard":
-        return parse_vanguard_positions(csv_text), "Vanguard"
+        positions = parse_vanguard_positions(csv_text)
+        # Vanguard's combined file contains transactions — extract them too
+        try:
+            transactions = parse_vanguard_transactions(csv_text)
+        except ValueError:
+            transactions = None
+        return positions, "Vanguard", transactions
     elif brokerage == "robinhood":
         txns = parse_robinhood_transactions(csv_text)
         positions = robinhood_reconstruct_positions(txns)
-        return positions, "Robinhood"
+        return positions, "Robinhood", txns
     raise ValueError(f"Unknown brokerage: {brokerage}")
 
 

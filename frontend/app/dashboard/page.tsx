@@ -291,7 +291,8 @@ export default function Dashboard() {
         setPositions(data.positions ?? [])
         setHealth(data.health ?? null)
         const brokerageLabel = data.brokerage ? ` from ${data.brokerage}` : ''
-        setUploadMsg(`Imported ${data.imported} positions${brokerageLabel}`)
+        const lotsLabel = data.tax_lots_saved ? ` · ${data.tax_lots_saved} tax lots saved` : ''
+        setUploadMsg(`Imported ${data.imported} positions${brokerageLabel}${lotsLabel}`)
         if (!portfolio?.investment_style) setShowStyleModal(true)
       } else {
         const brokerageLabel = data.brokerage ? ` from ${data.brokerage}` : ''

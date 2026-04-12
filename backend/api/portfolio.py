@@ -110,7 +110,7 @@ async def import_positions(
     text = content.decode("utf-8")
 
     try:
-        positions, brokerage = parse_positions(text, brokerage)
+        positions, brokerage, embedded_transactions = parse_positions(text, brokerage)
     except ValueError as e:
         raise HTTPException(status_code=422, detail=str(e))
 
@@ -118,6 +118,13 @@ async def import_positions(
 
     portfolio = get_or_create_portfolio(user_id)
     upsert_positions(portfolio["id"], user_id, positions)
+
+    # Vanguard and Robinhood files include transaction history — save tax lots automatically
+    tax_lots_saved = 0
+    if embedded_transactions:
+        lots = reconstruct_tax_lots(embedded_transactions)
+        replace_tax_lots(user_id, lots)
+        tax_lots_saved = len(lots)
 
     get_supabase().table("portfolios").update({
         "last_import_at": datetime.now(timezone.utc).isoformat(),
@@ -128,6 +135,7 @@ async def import_positions(
     return {
         "imported": len(positions),
         "brokerage": brokerage,
+        "tax_lots_saved": tax_lots_saved or None,
         "positions": positions,
         "health": health,
     }

@@ -165,7 +165,7 @@ def reconstruct_tax_lots(transactions: List[Dict[str, Any]]) -> List[Dict[str, A
         if not symbol:
             continue
 
-        if txn["action"] == "BUY" and txn["quantity"] and txn["price"]:
+        if txn["action"] in ("BUY", "REINVESTMENT") and txn["quantity"] and txn["price"]:
             lot = {
                 "symbol": symbol,
                 "shares": txn["quantity"],
@@ -176,7 +176,7 @@ def reconstruct_tax_lots(transactions: List[Dict[str, Any]]) -> List[Dict[str, A
             }
             lots_by_symbol.setdefault(symbol, []).append(lot)
 
-        elif txn["action"] in ("SELL", "REINVESTMENT") and txn["quantity"]:
+        elif txn["action"] == "SELL" and txn["quantity"]:
             # FIFO: reduce shares from oldest lot first
             remaining_to_sell = abs(txn["quantity"])
             for lot in lots_by_symbol.get(symbol, []):
