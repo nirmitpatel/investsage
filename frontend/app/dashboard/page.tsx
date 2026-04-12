@@ -418,7 +418,7 @@ export default function Dashboard() {
               )}
 
               <div className="flex gap-3 flex-wrap">
-                <button onClick={() => positionsRef.current?.click()} disabled={uploading !== null || !selectedBrokerage}
+                <button onClick={() => positionsRef.current?.click()} disabled={uploading !== null}
                   className="flex items-center gap-2 bg-violet-600 hover:bg-violet-500 disabled:opacity-40 disabled:cursor-not-allowed px-5 py-2.5 rounded-xl text-sm font-medium transition shadow-lg shadow-violet-500/20"
                 >
                   {uploading === 'positions' ? <Spinner /> : <UploadIcon />}
