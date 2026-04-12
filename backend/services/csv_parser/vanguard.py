@@ -109,13 +109,14 @@ def _parse_transactions_section(lines: List[str]) -> List[Dict[str, Any]]:
     return transactions
 
 
-def _cost_basis_map(transactions: List[Dict[str, Any]]) -> Dict[str, float]:
+def _cost_basis_map(
+    transactions: List[Dict[str, Any]],
+) -> Dict[str, Dict[str, float]]:
     """
-    Compute total cost basis per symbol from BUY transactions.
-    Returns {symbol: total_cost_dollars}.
-    Uses weighted-average across all buys (sells reduce proportionally).
+    Compute cost basis per symbol from BUY transactions.
+    Returns {symbol: {total_cost, shares_seen}}.
+    shares_seen lets callers detect truncated history (shares_seen << actual shares).
     """
-    # {symbol: {shares, total_cost}}
     holdings: Dict[str, Dict] = {}
 
     for txn in sorted(transactions, key=lambda x: x.get("trade_date") or ""):
@@ -139,7 +140,7 @@ def _cost_basis_map(transactions: List[Dict[str, Any]]) -> Dict[str, float]:
                 h["total_cost"] -= cost_per_share * min(sell_qty, h["shares"])
                 h["shares"] = max(0.0, h["shares"] - sell_qty)
 
-    return {sym: h["total_cost"] for sym, h in holdings.items() if h["total_cost"] > 0}
+    return {sym: h for sym, h in holdings.items() if h["total_cost"] > 0}
 
 
 def parse_vanguard_positions(csv_text: str) -> List[Dict[str, Any]]:
@@ -178,17 +179,26 @@ def parse_vanguard_positions(csv_text: str) -> List[Dict[str, Any]]:
         share_price = _clean_number(row.get("Share Price", ""))
         total_value = _clean_number(row.get("Total Value", ""))
 
-        total_cost = cost_map.get(symbol)
+        entry = cost_map.get(symbol)
         gain_loss = None
         gain_loss_pct = None
         avg_cost = None
+        total_cost = None
 
-        if total_cost is not None and total_value is not None:
-            gain_loss = round(total_value - total_cost, 2)
-            if total_cost != 0:
-                gain_loss_pct = round((gain_loss / total_cost) * 100, 2)
-        if total_cost is not None and shares and shares > 0:
-            avg_cost = round(total_cost / shares, 4)
+        if entry:
+            shares_seen = entry["shares"]
+            raw_cost = entry["total_cost"]
+            # If transaction history covers less than 90% of current shares,
+            # the export window is truncated — cost basis would be understated.
+            # Leave gain/loss as None rather than show misleading numbers.
+            history_complete = shares and shares_seen >= shares * 0.90
+            if history_complete:
+                total_cost = raw_cost
+                if total_value is not None:
+                    gain_loss = round(total_value - total_cost, 2)
+                    if total_cost != 0:
+                        gain_loss_pct = round((gain_loss / total_cost) * 100, 2)
+                avg_cost = round(total_cost / shares, 4)
 
         description = (row.get("Investment Name") or row.get("Fund Name") or "").strip()
 
