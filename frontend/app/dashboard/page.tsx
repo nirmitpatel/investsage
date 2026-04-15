@@ -163,7 +163,7 @@ function ShareModal({ token, loading, copied, onCopy, onRevoke, onClose }: {
   token: string | null; loading: boolean; copied: boolean
   onCopy: () => void; onRevoke: () => void; onClose: () => void
 }) {
-  const shareUrl = token ? `${typeof window !== 'undefined' ? window.location.origin : ''}/share/${token}` : ''
+  const shareUrl = token ? `${typeof window !== 'undefined' ? window.location.origin : ''}/share?token=${token}` : ''
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm p-4">
       <div className="bg-[#0f0f1a] border border-white/[0.10] rounded-2xl p-8 max-w-md w-full shadow-2xl">
@@ -465,7 +465,7 @@ export default function Dashboard() {
 
   function handleCopyShareLink() {
     if (!shareToken) return
-    const url = `${window.location.origin}/share/${shareToken}`
+    const url = `${window.location.origin}/share?token=${shareToken}`
     navigator.clipboard.writeText(url)
     setShareCopied(true)
     setTimeout(() => setShareCopied(false), 2000)
