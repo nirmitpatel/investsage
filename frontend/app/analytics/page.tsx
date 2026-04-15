@@ -23,6 +23,12 @@ interface SectorBreakdown {
   count: number
 }
 
+interface Snapshot {
+  snapshot_date: string
+  total_value: number
+  total_cost: number | null
+}
+
 interface Analytics {
   empty: boolean
   summary?: {
@@ -65,6 +71,7 @@ export default function AnalyticsPage() {
   const supabase = createClient()
   const [loading, setLoading] = useState(true)
   const [data, setData] = useState<Analytics | null>(null)
+  const [snapshots, setSnapshots] = useState<Snapshot[]>([])
   const [error, setError] = useState('')
 
   async function getToken() {
@@ -81,14 +88,18 @@ export default function AnalyticsPage() {
     if (!token) { router.push('/login'); return }
 
     try {
-      const res = await fetch(`${API}/api/v1/analytics`, {
-        headers: { Authorization: `Bearer ${token}` },
-      })
-      if (res.status === 401) { router.push('/login?reason=session_expired'); return }
-      if (res.ok) {
-        setData(await res.json())
+      const [analyticsRes, snapshotsRes] = await Promise.all([
+        fetch(`${API}/api/v1/analytics`, { headers: { Authorization: `Bearer ${token}` } }),
+        fetch(`${API}/api/v1/analytics/snapshots`, { headers: { Authorization: `Bearer ${token}` } }),
+      ])
+      if (analyticsRes.status === 401) { router.push('/login?reason=session_expired'); return }
+      if (analyticsRes.ok) {
+        setData(await analyticsRes.json())
       } else {
         setError('Failed to load analytics. Please try again.')
+      }
+      if (snapshotsRes.ok) {
+        setSnapshots(await snapshotsRes.json())
       }
     } catch {
       setError('Could not connect to the server. Please try again.')
@@ -138,6 +149,11 @@ export default function AnalyticsPage() {
                   <StatCard label="Portfolio Value" value={`$${data.summary.total_value.toLocaleString('en-US', { maximumFractionDigits: 0 })}`} />
                   <StatCard label="Positions" value={String(data.summary.position_count)} />
                 </div>
+              )}
+
+              {/* Portfolio value over time */}
+              {snapshots.length >= 2 && (
+                <PortfolioChart snapshots={snapshots} />
               )}
 
               {/* vs S&P 500 */}
@@ -319,6 +335,87 @@ function EmptyState({ router }: { router: ReturnType<typeof useRouter> }) {
       <button onClick={() => router.push('/dashboard')} className="inline-flex items-center gap-2 bg-violet-600 hover:bg-violet-500 px-5 py-2.5 rounded-xl text-sm font-medium transition">
         Go to Portfolio
       </button>
+    </div>
+  )
+}
+
+function PortfolioChart({ snapshots }: { snapshots: Snapshot[] }) {
+  const W = 800
+  const H = 160
+  const PAD = { top: 12, right: 16, bottom: 28, left: 60 }
+  const innerW = W - PAD.left - PAD.right
+  const innerH = H - PAD.top - PAD.bottom
+
+  const values = snapshots.map(s => s.total_value)
+  const minV = Math.min(...values)
+  const maxV = Math.max(...values)
+  const range = maxV - minV || 1
+
+  const xs = snapshots.map((_, i) => PAD.left + (i / (snapshots.length - 1)) * innerW)
+  const ys = values.map(v => PAD.top + innerH - ((v - minV) / range) * innerH)
+
+  const polyline = xs.map((x, i) => `${x},${ys[i]}`).join(' ')
+  const area = [
+    `M ${xs[0]},${PAD.top + innerH}`,
+    ...xs.map((x, i) => `L ${x},${ys[i]}`),
+    `L ${xs[xs.length - 1]},${PAD.top + innerH}`,
+    'Z',
+  ].join(' ')
+
+  // Y-axis ticks
+  const yTicks = [0, 0.25, 0.5, 0.75, 1].map(t => ({
+    y: PAD.top + innerH - t * innerH,
+    label: `$${Math.round(minV + t * range).toLocaleString('en-US', { notation: 'compact', maximumFractionDigits: 1 })}`,
+  }))
+
+  // X-axis: show ~4 evenly spaced date labels
+  const xLabelCount = Math.min(4, snapshots.length)
+  const xLabelIdxs = Array.from({ length: xLabelCount }, (_, i) =>
+    Math.round((i / (xLabelCount - 1)) * (snapshots.length - 1))
+  )
+
+  const first = snapshots[0]
+  const last = snapshots[snapshots.length - 1]
+  const delta = last.total_value - first.total_value
+  const deltaPos = delta >= 0
+
+  return (
+    <div className="bg-white/[0.03] border border-white/[0.08] rounded-2xl p-6">
+      <div className="flex items-center justify-between mb-4">
+        <h2 className="font-semibold text-sm">Portfolio Value Over Time</h2>
+        <span className={`text-sm font-bold ${deltaPos ? 'text-emerald-400' : 'text-red-400'}`}>
+          {deltaPos ? '+' : '−'}${Math.abs(delta).toLocaleString('en-US', { minimumFractionDigits: 0, maximumFractionDigits: 0 })}
+          <span className="text-xs font-normal text-gray-500 ml-1">since first snapshot</span>
+        </span>
+      </div>
+      <svg viewBox={`0 0 ${W} ${H}`} className="w-full" style={{ height: 160 }}>
+        <defs>
+          <linearGradient id="chartGrad" x1="0" y1="0" x2="0" y2="1">
+            <stop offset="0%" stopColor="#8b5cf6" stopOpacity="0.25" />
+            <stop offset="100%" stopColor="#8b5cf6" stopOpacity="0" />
+          </linearGradient>
+        </defs>
+        {/* Y-axis grid lines + labels */}
+        {yTicks.map((t, i) => (
+          <g key={i}>
+            <line x1={PAD.left} y1={t.y} x2={PAD.left + innerW} y2={t.y} stroke="rgba(255,255,255,0.04)" strokeWidth="1" />
+            <text x={PAD.left - 6} y={t.y + 4} textAnchor="end" fontSize="10" fill="rgba(156,163,175,0.7)">{t.label}</text>
+          </g>
+        ))}
+        {/* Area fill */}
+        <path d={area} fill="url(#chartGrad)" />
+        {/* Line */}
+        <polyline points={polyline} fill="none" stroke="#8b5cf6" strokeWidth="2" strokeLinejoin="round" strokeLinecap="round" />
+        {/* X-axis date labels */}
+        {xLabelIdxs.map(i => (
+          <text key={i} x={xs[i]} y={H - 6} textAnchor="middle" fontSize="10" fill="rgba(107,114,128,0.9)">
+            {new Date(snapshots[i].snapshot_date + 'T00:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
+          </text>
+        ))}
+        {/* Last value dot */}
+        <circle cx={xs[xs.length - 1]} cy={ys[ys.length - 1]} r="3.5" fill="#8b5cf6" />
+      </svg>
+      <p className="text-xs text-gray-700 mt-1">{snapshots.length} snapshot{snapshots.length !== 1 ? 's' : ''} · updates on import or price refresh</p>
     </div>
   )
 }

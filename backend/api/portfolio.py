@@ -20,6 +20,7 @@ from services.db.supabase_client import (
     replace_tax_lots,
     update_portfolio_style,
     patch_positions_cost_basis,
+    upsert_snapshot,
 )
 from services.health_score import calculate_health_score
 from dependencies import get_current_user
@@ -134,6 +135,10 @@ async def import_positions(
 
     health = await asyncio.to_thread(_build_health, positions, portfolio)
 
+    total_value = sum(p.get("current_value") or 0 for p in positions)
+    total_cost = sum(p.get("total_cost_basis") or 0 for p in positions) or None
+    upsert_snapshot(portfolio["id"], user_id, total_value, total_cost)
+
     return {
         "imported": len(positions),
         "brokerage": brokerage,
@@ -241,4 +246,7 @@ async def refresh_prices(user_id: str = Depends(get_current_user)):
     portfolio = get_or_create_portfolio(user_id)
     positions = get_positions(portfolio["id"])
     health = await asyncio.to_thread(_build_health, positions, portfolio)
+    total_value = sum(p.get("current_value") or 0 for p in positions)
+    total_cost = sum(p.get("total_cost_basis") or 0 for p in positions) or None
+    upsert_snapshot(portfolio["id"], user_id, total_value, total_cost)
     return {"updated": n, "positions": positions, "health": health}

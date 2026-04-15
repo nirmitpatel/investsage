@@ -22,6 +22,12 @@ STYLE_REBALANCE_TIP = {
     None: "Consider rebalancing to reduce concentration risk.",
 }
 
+STYLE_LABEL = {
+    "play_it_safe": "play-it-safe",
+    "beat_the_market": "beat-the-market",
+    "long_game": "long-game",
+}
+
 STYLE_TREND_PERIOD = {
     "play_it_safe": ("3y", "3-year"),
     "beat_the_market": ("3mo", "3-month"),
@@ -216,6 +222,66 @@ def calculate_health_score(
         else:
             msg = f"{len(losing)} of {n} positions are at a loss. Consider reviewing underperformers and rebalancing into stronger positions."
         issues.append({"type": "majority_losing", "severity": "medium", "message": msg})
+
+    # ── Market trend alignment (beat_the_market and play_it_safe only) ──
+    # long_game intentionally excluded — 10-year trend data doesn't warrant
+    # short-term rebalancing signals for patient investors.
+    if market_trends and investment_style in ("beat_the_market", "play_it_safe") and total_value > 0:
+        style_label = STYLE_LABEL.get(investment_style, investment_style)
+        for sector, val in sector_values_analysis.items():
+            trend = market_trends.get(sector)
+            if trend is None:
+                continue
+            pct = (val / total_value) * 100
+
+            # Penalize heavy allocation in underperforming sectors
+            if trend < -3 and pct > 15:
+                if trend < -8 or pct > 25:
+                    deductions += 12
+                    issues.append({
+                        "type": "sector_trend_headwind",
+                        "severity": "high",
+                        "message": (
+                            f"{sector} is {pct:.0f}% of your portfolio and is down {abs(trend):.1f}% "
+                            f"over the {trend_period_label} period. For a {style_label} strategy this is a "
+                            f"significant headwind — consider reducing exposure or rotating into stronger sectors."
+                        ),
+                    })
+                else:
+                    deductions += 7
+                    issues.append({
+                        "type": "sector_trend_headwind",
+                        "severity": "medium",
+                        "message": (
+                            f"{sector} is {pct:.0f}% of your portfolio and is down {abs(trend):.1f}% "
+                            f"({trend_period_label}). A {style_label} approach benefits from rotating "
+                            f"out of underperforming sectors."
+                        ),
+                    })
+            elif trend < -3 and pct > 8:
+                deductions += 4
+                issues.append({
+                    "type": "sector_trend_headwind",
+                    "severity": "low",
+                    "message": (
+                        f"{sector} ({pct:.0f}% of portfolio) has a negative {trend_period_label} "
+                        f"trend ({trend:+.1f}%). Monitor this sector closely."
+                    ),
+                })
+
+        # Note opportunities in outperforming sectors where you're underweight
+        top_sectors = sorted(
+            [(s, t) for s, t in market_trends.items() if t > 8],
+            key=lambda x: -x[1],
+        )
+        for sector, trend in top_sectors[:3]:
+            held_pct = (sector_values_analysis.get(sector, 0) / total_value * 100)
+            if held_pct < 5:
+                exposure_str = "no exposure" if held_pct < 0.5 else f"only {held_pct:.0f}% exposure"
+                notes.append(
+                    f"{sector} is up {trend:.1f}% ({trend_period_label}) and you have {exposure_str}. "
+                    f"For a {style_label} strategy, this could be an opportunity worth exploring."
+                )
 
     score = max(0, min(100, 100 - deductions))
 

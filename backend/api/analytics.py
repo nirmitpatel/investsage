@@ -6,7 +6,7 @@ Returns performance breakdown, best/worst performers, and S&P 500 comparison.
 import asyncio
 from fastapi import APIRouter, HTTPException, Depends
 
-from services.db.supabase_client import get_or_create_portfolio, get_positions
+from services.db.supabase_client import get_or_create_portfolio, get_positions, get_snapshots
 from services.market_data.yfinance_client import fetch_sector_etf_performance
 from services.health_score import build_effective_sector_values, calculate_health_score
 from services.market_data.yfinance_client import fetch_fund_sector_weightings
@@ -139,3 +139,11 @@ def _build_analytics_sync(user_id: str) -> dict:
 @router.get("")
 async def get_analytics(user_id: str = Depends(get_current_user)):
     return await asyncio.to_thread(_build_analytics_sync, user_id)
+
+
+@router.get("/snapshots")
+async def get_portfolio_snapshots(user_id: str = Depends(get_current_user)):
+    def _fetch():
+        portfolio = get_or_create_portfolio(user_id)
+        return get_snapshots(portfolio["id"])
+    return await asyncio.to_thread(_fetch)

@@ -101,6 +101,33 @@ def save_tax_lots(user_id: str, position_rows: List[Dict[str, Any]], lots: List[
     replace_tax_lots(user_id, lots)
 
 
+def upsert_snapshot(portfolio_id: str, user_id: str, total_value: float, total_cost: float | None) -> None:
+    """Insert or update today's portfolio value snapshot (one row per day)."""
+    from datetime import date
+    sb = get_supabase()
+    sb.table("portfolio_snapshots").upsert({
+        "portfolio_id": portfolio_id,
+        "user_id": user_id,
+        "snapshot_date": date.today().isoformat(),
+        "total_value": round(total_value, 4),
+        "total_cost": round(total_cost, 4) if total_cost is not None else None,
+    }, on_conflict="portfolio_id,snapshot_date").execute()
+
+
+def get_snapshots(portfolio_id: str, limit: int = 365) -> List[Dict[str, Any]]:
+    """Return up to `limit` daily snapshots ordered oldest-first."""
+    sb = get_supabase()
+    result = (
+        sb.table("portfolio_snapshots")
+        .select("snapshot_date,total_value,total_cost")
+        .eq("portfolio_id", portfolio_id)
+        .order("snapshot_date", desc=False)
+        .limit(limit)
+        .execute()
+    )
+    return result.data or []
+
+
 def patch_positions_cost_basis(portfolio_id: str, updates: List[Dict[str, Any]]) -> None:
     """Update cost basis and gain/loss fields for existing positions by symbol."""
     sb = get_supabase()

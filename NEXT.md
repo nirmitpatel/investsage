@@ -6,10 +6,8 @@ _Say "execute next" to run the top unchecked item. Completed tasks are auto-stri
 
 ## P2 — Features
 
-- [ ] **Portfolio history snapshots** — store point-in-time snapshots to enable a value-over-time chart on analytics
 - [ ] **Email digest notifications** — weekly "your health score changed" or "new tax opportunity" email
 - [ ] **Shareable portfolio report** — one-click PDF or read-only shareable link for dashboard snapshot
-- [ ] **Mode-aware health scoring** — `market_trends` data is fetched but never used in scoring; penalize heavy allocation in sectors with negative trend for beat-the-market/play-it-safe; reward underweight allocation in outperforming sectors
 - [ ] **Capture account type from Fidelity CSV** — `Account Name/Number` column is parsed but discarded; detect `401k`, `Roth 401(k)`, `Individual`, `IRA` etc.; store `account_type` on positions; use it to split personal vs retirement views
 - [ ] **Account-aware AI recommendations** — suppress Buy/Hold/Sell for 401k positions; replace with rebalancing suggestions within available fund options
 - [ ] **401k retirement alignment scoring** — collect retirement year from user profile; compare actual 401k equity/bond split against expected glide path; surface as a dedicated health card

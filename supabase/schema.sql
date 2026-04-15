@@ -103,6 +103,27 @@ CREATE TABLE recommendation_snapshots (
   created_at TIMESTAMP DEFAULT NOW()
 );
 
+-- portfolio_snapshots: daily point-in-time portfolio value (for value-over-time chart)
+CREATE TABLE portfolio_snapshots (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  portfolio_id UUID REFERENCES portfolios(id) ON DELETE CASCADE,
+  user_id UUID REFERENCES auth.users(id) ON DELETE CASCADE,
+  snapshot_date DATE NOT NULL,
+  total_value DECIMAL(15,4) NOT NULL,
+  total_cost DECIMAL(15,4),
+  UNIQUE(portfolio_id, snapshot_date)
+);
+-- Migration (run if schema already applied):
+-- CREATE TABLE IF NOT EXISTS portfolio_snapshots (
+--   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+--   portfolio_id UUID REFERENCES portfolios(id) ON DELETE CASCADE,
+--   user_id UUID REFERENCES auth.users(id) ON DELETE CASCADE,
+--   snapshot_date DATE NOT NULL,
+--   total_value DECIMAL(15,4) NOT NULL,
+--   total_cost DECIMAL(15,4),
+--   UNIQUE(portfolio_id, snapshot_date)
+-- );
+
 -- ─────────────────────────────────────────
 -- Row Level Security (RLS)
 -- ─────────────────────────────────────────
@@ -111,6 +132,7 @@ ALTER TABLE portfolios ENABLE ROW LEVEL SECURITY;
 ALTER TABLE positions ENABLE ROW LEVEL SECURITY;
 ALTER TABLE tax_lots ENABLE ROW LEVEL SECURITY;
 ALTER TABLE recommendation_snapshots ENABLE ROW LEVEL SECURITY;
+ALTER TABLE portfolio_snapshots ENABLE ROW LEVEL SECURITY;
 
 -- smart_money_trades and policy_events are public read (shared data)
 ALTER TABLE smart_money_trades ENABLE ROW LEVEL SECURITY;
@@ -127,6 +149,9 @@ CREATE POLICY "Users see own tax lots" ON tax_lots
   FOR ALL USING (auth.uid() = user_id);
 
 CREATE POLICY "Users see own recommendations" ON recommendation_snapshots
+  FOR ALL USING (auth.uid() = user_id);
+
+CREATE POLICY "Users see own snapshots" ON portfolio_snapshots
   FOR ALL USING (auth.uid() = user_id);
 
 -- Smart money + policy: all authenticated users can read
@@ -147,3 +172,4 @@ CREATE INDEX idx_tax_lots_transition ON tax_lots(lt_transition_date);
 CREATE INDEX idx_smart_money_symbol ON smart_money_trades(symbol);
 CREATE INDEX idx_smart_money_date ON smart_money_trades(trade_date DESC);
 CREATE INDEX idx_policy_symbols ON policy_events USING GIN(affected_symbols);
+CREATE INDEX idx_snapshots_portfolio_date ON portfolio_snapshots(portfolio_id, snapshot_date DESC);
