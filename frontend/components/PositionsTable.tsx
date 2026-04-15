@@ -14,6 +14,20 @@ export interface Position {
   percent_of_account: number | null
   sector: string | null
   previous_close: number | null
+  account_type: string | null
+}
+
+const RETIREMENT_TYPES = new Set(['401k', 'roth_401k', 'ira', 'roth_ira', 'rollover_ira', 'sep_ira', 'hsa'])
+
+const ACCOUNT_TYPE_LABEL: Record<string, string> = {
+  individual: 'Brokerage',
+  '401k': '401(k)',
+  roth_401k: 'Roth 401(k)',
+  ira: 'IRA',
+  roth_ira: 'Roth IRA',
+  rollover_ira: 'Rollover IRA',
+  sep_ira: 'SEP IRA',
+  hsa: 'HSA',
 }
 
 function fmt(n: number | null, prefix = '') {
@@ -142,10 +156,21 @@ interface Props {
   recErrors: Record<string, string>
   onGetRecommendation: (symbol: string) => void
   onImportClick: () => void
+  readOnly?: boolean
 }
 
-export default function PositionsTable({ positions, loadingRec, recommendations, recErrors, onGetRecommendation, onImportClick }: Props) {
+export default function PositionsTable({ positions, loadingRec, recommendations, recErrors, onGetRecommendation, onImportClick, readOnly }: Props) {
   const [loadingAll, setLoadingAll] = useState(false)
+  const [tab, setTab] = useState<'all' | 'personal' | 'retirement'>('all')
+
+  const hasPersonal = positions.some(p => !RETIREMENT_TYPES.has(p.account_type ?? 'individual'))
+  const hasRetirement = positions.some(p => RETIREMENT_TYPES.has(p.account_type ?? 'individual'))
+  const showTabs = hasPersonal && hasRetirement
+
+  const visiblePositions = !showTabs || tab === 'all' ? positions
+    : tab === 'personal'
+      ? positions.filter(p => !RETIREMENT_TYPES.has(p.account_type ?? 'individual'))
+      : positions.filter(p => RETIREMENT_TYPES.has(p.account_type ?? 'individual'))
 
   if (positions.length === 0) {
     return (
@@ -170,8 +195,8 @@ export default function PositionsTable({ positions, loadingRec, recommendations,
     )
   }
 
-  const pending = positions.filter(p => !recommendations[p.symbol] && !loadingRec[p.symbol])
-  const doneCount = positions.filter(p => recommendations[p.symbol]).length
+  const pending = visiblePositions.filter(p => !recommendations[p.symbol] && !loadingRec[p.symbol])
+  const doneCount = visiblePositions.filter(p => recommendations[p.symbol]).length
 
   async function handleAskAll() {
     setLoadingAll(true)
@@ -186,8 +211,21 @@ export default function PositionsTable({ positions, loadingRec, recommendations,
   return (
     <div className="bg-white/[0.03] border border-white/[0.08] rounded-2xl overflow-hidden">
       <div className="px-6 py-5 border-b border-white/[0.06] flex items-center justify-between">
-        <h2 className="font-semibold">Positions</h2>
-        {positions.length > 0 && (
+        <div className="flex items-center gap-4">
+          <h2 className="font-semibold">Positions</h2>
+          {showTabs && (
+            <div className="flex items-center gap-1 bg-white/[0.04] border border-white/[0.06] rounded-lg p-0.5">
+              {(['all', 'personal', 'retirement'] as const).map(t => (
+                <button key={t} onClick={() => setTab(t)}
+                  className={`px-3 py-1 rounded-md text-xs font-medium transition capitalize ${tab === t ? 'bg-white/[0.10] text-white' : 'text-gray-500 hover:text-gray-300'}`}
+                >
+                  {t}
+                </button>
+              ))}
+            </div>
+          )}
+        </div>
+        {positions.length > 0 && !readOnly && (
           <div className="flex items-center gap-3">
             {doneCount > 0 && (
               <span className="text-xs text-gray-600">{doneCount}/{positions.length} analyzed</span>
@@ -211,13 +249,13 @@ export default function PositionsTable({ positions, loadingRec, recommendations,
         <table className="w-full min-w-[700px] text-sm">
           <thead>
             <tr className="border-b border-white/[0.06]">
-              {['Symbol', 'Sector', 'Shares', 'Price', 'Value', 'Cost Basis', 'Gain / Loss', '%', 'Day', 'AI'].map((h, i) => (
+              {['Symbol', 'Sector', 'Shares', 'Price', 'Value', 'Cost Basis', 'Gain / Loss', '%', 'Day', ...(readOnly ? [] : ['AI'])].map((h, i) => (
                 <th key={h} className={`px-5 py-3.5 text-xs font-medium text-gray-500 uppercase tracking-wider ${i < 2 ? 'text-left' : 'text-right'}`}>{h}</th>
               ))}
             </tr>
           </thead>
           <tbody className="divide-y divide-white/[0.04]">
-            {positions.map((p) => (
+            {visiblePositions.map((p) => (
               <tr key={p.symbol} className="hover:bg-white/[0.02] transition-colors">
                 <td className="px-5 py-4">
                   <div className="flex items-center gap-3">
@@ -225,7 +263,14 @@ export default function PositionsTable({ positions, loadingRec, recommendations,
                       {p.symbol.slice(0, 2)}
                     </div>
                     <div>
-                      <div className="font-semibold text-white">{p.symbol}</div>
+                      <div className="flex items-center gap-1.5">
+                        <span className="font-semibold text-white">{p.symbol}</span>
+                        {p.account_type && p.account_type !== 'individual' && (
+                          <span className="text-[10px] font-medium px-1.5 py-0.5 rounded bg-amber-500/10 text-amber-400 border border-amber-500/20">
+                            {ACCOUNT_TYPE_LABEL[p.account_type] ?? p.account_type}
+                          </span>
+                        )}
+                      </div>
                       <div className="text-gray-600 text-xs truncate max-w-[140px]">{p.description}</div>
                     </div>
                   </div>
@@ -274,28 +319,30 @@ export default function PositionsTable({ positions, loadingRec, recommendations,
                     )
                   })()}
                 </td>
-                <td className="px-5 py-4 text-right">
-                  {loadingRec[p.symbol] ? (
-                    <span className="inline-flex justify-center w-full"><Spinner /></span>
-                  ) : recommendations[p.symbol] ? (
-                    <RecBadge rec={recommendations[p.symbol]} />
-                  ) : recErrors[p.symbol] ? (
-                    <button
-                      onClick={() => onGetRecommendation(p.symbol)}
-                      title={recErrors[p.symbol]}
-                      className="text-xs text-red-400 hover:text-red-300 border border-red-500/20 hover:border-red-500/40 px-2.5 py-1 rounded-lg transition"
-                    >
-                      Retry
-                    </button>
-                  ) : (
-                    <button
-                      onClick={() => onGetRecommendation(p.symbol)}
-                      className="text-xs text-gray-600 hover:text-violet-400 border border-white/[0.06] hover:border-violet-500/30 px-2.5 py-1 rounded-lg transition"
-                    >
-                      Ask AI
-                    </button>
-                  )}
-                </td>
+                {!readOnly && (
+                  <td className="px-5 py-4 text-right">
+                    {loadingRec[p.symbol] ? (
+                      <span className="inline-flex justify-center w-full"><Spinner /></span>
+                    ) : recommendations[p.symbol] ? (
+                      <RecBadge rec={recommendations[p.symbol]} />
+                    ) : recErrors[p.symbol] ? (
+                      <button
+                        onClick={() => onGetRecommendation(p.symbol)}
+                        title={recErrors[p.symbol]}
+                        className="text-xs text-red-400 hover:text-red-300 border border-red-500/20 hover:border-red-500/40 px-2.5 py-1 rounded-lg transition"
+                      >
+                        Retry
+                      </button>
+                    ) : (
+                      <button
+                        onClick={() => onGetRecommendation(p.symbol)}
+                        className="text-xs text-gray-600 hover:text-violet-400 border border-white/[0.06] hover:border-violet-500/30 px-2.5 py-1 rounded-lg transition"
+                      >
+                        Ask AI
+                      </button>
+                    )}
+                  </td>
+                )}
               </tr>
             ))}
           </tbody>

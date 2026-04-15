@@ -28,9 +28,12 @@ CREATE TABLE positions (
   percent_of_account DECIMAL(6,4),
   sector VARCHAR(50),
   previous_close DECIMAL(15,4),
+  account_type VARCHAR(20) DEFAULT 'individual',
   last_updated TIMESTAMP DEFAULT NOW()
 );
--- Migration (run if schema already applied): ALTER TABLE positions ADD COLUMN IF NOT EXISTS previous_close DECIMAL(15,4);
+-- Migration (run if schema already applied):
+-- ALTER TABLE positions ADD COLUMN IF NOT EXISTS previous_close DECIMAL(15,4);
+-- ALTER TABLE positions ADD COLUMN IF NOT EXISTS account_type VARCHAR(20) DEFAULT 'individual';
 
 -- tax_lots: reconstructed from transaction history (FIFO)
 CREATE TABLE tax_lots (
@@ -124,6 +127,23 @@ CREATE TABLE portfolio_snapshots (
 --   UNIQUE(portfolio_id, snapshot_date)
 -- );
 
+-- share_tokens: public share links for read-only portfolio snapshots
+CREATE TABLE share_tokens (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  token VARCHAR(32) UNIQUE NOT NULL,
+  portfolio_id UUID REFERENCES portfolios(id) ON DELETE CASCADE,
+  user_id UUID REFERENCES auth.users(id) ON DELETE CASCADE,
+  created_at TIMESTAMP DEFAULT NOW()
+);
+-- Migration (run if schema already applied):
+-- CREATE TABLE IF NOT EXISTS share_tokens (
+--   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+--   token VARCHAR(32) UNIQUE NOT NULL,
+--   portfolio_id UUID REFERENCES portfolios(id) ON DELETE CASCADE,
+--   user_id UUID REFERENCES auth.users(id) ON DELETE CASCADE,
+--   created_at TIMESTAMP DEFAULT NOW()
+-- );
+
 -- ─────────────────────────────────────────
 -- Row Level Security (RLS)
 -- ─────────────────────────────────────────
@@ -133,6 +153,7 @@ ALTER TABLE positions ENABLE ROW LEVEL SECURITY;
 ALTER TABLE tax_lots ENABLE ROW LEVEL SECURITY;
 ALTER TABLE recommendation_snapshots ENABLE ROW LEVEL SECURITY;
 ALTER TABLE portfolio_snapshots ENABLE ROW LEVEL SECURITY;
+ALTER TABLE share_tokens ENABLE ROW LEVEL SECURITY;
 
 -- smart_money_trades and policy_events are public read (shared data)
 ALTER TABLE smart_money_trades ENABLE ROW LEVEL SECURITY;
@@ -154,6 +175,9 @@ CREATE POLICY "Users see own recommendations" ON recommendation_snapshots
 CREATE POLICY "Users see own snapshots" ON portfolio_snapshots
   FOR ALL USING (auth.uid() = user_id);
 
+CREATE POLICY "Users manage own share tokens" ON share_tokens
+  FOR ALL USING (auth.uid() = user_id);
+
 -- Smart money + policy: all authenticated users can read
 CREATE POLICY "Authenticated users read smart money" ON smart_money_trades
   FOR SELECT USING (auth.role() = 'authenticated');
@@ -173,3 +197,4 @@ CREATE INDEX idx_smart_money_symbol ON smart_money_trades(symbol);
 CREATE INDEX idx_smart_money_date ON smart_money_trades(trade_date DESC);
 CREATE INDEX idx_policy_symbols ON policy_events USING GIN(affected_symbols);
 CREATE INDEX idx_snapshots_portfolio_date ON portfolio_snapshots(portfolio_id, snapshot_date DESC);
+CREATE INDEX idx_share_tokens_token ON share_tokens(token);

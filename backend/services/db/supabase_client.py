@@ -55,6 +55,7 @@ def upsert_positions(portfolio_id: str, user_id: str, positions: List[Dict[str, 
             "percent_of_account": p.get("percent_of_account"),
             "sector": p.get("sector"),
             "previous_close": p.get("previous_close"),
+            "account_type": p.get("account_type") or "individual",
         }
         for p in positions
     ]
@@ -125,6 +126,32 @@ def get_snapshots(portfolio_id: str, limit: int = 365) -> List[Dict[str, Any]]:
         .limit(limit)
         .execute()
     )
+    return result.data or []
+
+
+def create_share_token(portfolio_id: str, user_id: str) -> str:
+    import secrets
+    token = secrets.token_hex(16)  # 32-char hex string
+    get_supabase().table("share_tokens").insert({
+        "token": token,
+        "portfolio_id": portfolio_id,
+        "user_id": user_id,
+    }).execute()
+    return token
+
+
+def get_share_token_row(token: str) -> Dict[str, Any] | None:
+    result = get_supabase().table("share_tokens").select("portfolio_id,user_id").eq("token", token).limit(1).execute()
+    return result.data[0] if result.data else None
+
+
+def delete_share_token(token: str, user_id: str) -> bool:
+    result = get_supabase().table("share_tokens").delete().eq("token", token).eq("user_id", user_id).execute()
+    return bool(result.data)
+
+
+def get_user_share_tokens(portfolio_id: str) -> List[Dict[str, Any]]:
+    result = get_supabase().table("share_tokens").select("token,created_at").eq("portfolio_id", portfolio_id).order("created_at", desc=True).execute()
     return result.data or []
 
 

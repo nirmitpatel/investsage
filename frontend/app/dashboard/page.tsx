@@ -159,6 +159,74 @@ function InvestmentStyleModal({ currentStyle, saving, onSelect, onClose }: {
   )
 }
 
+function ShareModal({ token, loading, copied, onCopy, onRevoke, onClose }: {
+  token: string | null; loading: boolean; copied: boolean
+  onCopy: () => void; onRevoke: () => void; onClose: () => void
+}) {
+  const shareUrl = token ? `${typeof window !== 'undefined' ? window.location.origin : ''}/share/${token}` : ''
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm p-4">
+      <div className="bg-[#0f0f1a] border border-white/[0.10] rounded-2xl p-8 max-w-md w-full shadow-2xl">
+        <div className="flex items-start justify-between mb-6">
+          <div>
+            <h2 className="text-xl font-bold">Share Portfolio</h2>
+            <p className="text-gray-500 text-sm mt-1">Anyone with the link can view a read-only snapshot.</p>
+          </div>
+          <button onClick={onClose} className="text-gray-500 hover:text-gray-300 transition ml-4">
+            <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+            </svg>
+          </button>
+        </div>
+        {loading ? (
+          <div className="flex items-center justify-center py-8 gap-3 text-gray-500">
+            <svg className="animate-spin h-5 w-5" viewBox="0 0 24 24" fill="none">
+              <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+              <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z" />
+            </svg>
+            Generating link…
+          </div>
+        ) : token ? (
+          <div className="space-y-4">
+            <div className="flex items-center gap-2 bg-white/[0.04] border border-white/[0.08] rounded-xl px-4 py-3">
+              <span className="text-sm text-gray-300 truncate flex-1 font-mono">{shareUrl}</span>
+            </div>
+            <div className="flex gap-3">
+              <button onClick={onCopy}
+                className="flex-1 flex items-center justify-center gap-2 text-sm bg-violet-600/20 hover:bg-violet-600/30 border border-violet-500/30 text-violet-300 px-4 py-2.5 rounded-xl transition"
+              >
+                {copied ? (
+                  <>
+                    <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
+                    </svg>
+                    Copied!
+                  </>
+                ) : (
+                  <>
+                    <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.8}>
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" />
+                    </svg>
+                    Copy link
+                  </>
+                )}
+              </button>
+              <button onClick={onRevoke}
+                className="flex items-center gap-2 text-sm text-red-400 hover:text-red-300 border border-red-500/20 hover:border-red-500/40 px-4 py-2.5 rounded-xl transition"
+              >
+                Revoke
+              </button>
+            </div>
+            <p className="text-xs text-gray-600">Revoking the link immediately disables access for anyone who has it.</p>
+          </div>
+        ) : (
+          <div className="text-center py-6 text-gray-500 text-sm">Failed to generate link. Try again.</div>
+        )}
+      </div>
+    </div>
+  )
+}
+
 export default function Dashboard() {
   const router = useRouter()
   const supabase = createClient()
@@ -180,6 +248,10 @@ export default function Dashboard() {
   const [recommendations, setRecommendations] = useState<Record<string, any>>({})
   const [loadingRec, setLoadingRec] = useState<Record<string, boolean>>({})
   const [recErrors, setRecErrors] = useState<Record<string, string>>({})
+  const [showShareModal, setShowShareModal] = useState(false)
+  const [shareToken, setShareToken] = useState<string | null>(null)
+  const [shareLoading, setShareLoading] = useState(false)
+  const [shareCopied, setShareCopied] = useState(false)
 
   const positionsRef = useRef<HTMLInputElement>(null)
   const transactionsRef = useRef<HTMLInputElement>(null)
@@ -350,6 +422,55 @@ export default function Dashboard() {
     setRefreshing(false)
   }
 
+  async function handleOpenShare() {
+    setShowShareModal(true)
+    if (shareToken) return
+    setShareLoading(true)
+    const token = await getToken()
+    if (!token) return
+    // Load existing token if any
+    const listRes = await fetch(`${API}/api/v1/share/tokens`, { headers: { Authorization: `Bearer ${token}` } })
+    if (listRes.ok) {
+      const data = await listRes.json()
+      if (data.tokens?.length > 0) {
+        setShareToken(data.tokens[0].token)
+        setShareLoading(false)
+        return
+      }
+    }
+    // Create new token
+    const createRes = await fetch(`${API}/api/v1/share`, {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${token}` },
+    })
+    if (createRes.ok) {
+      const data = await createRes.json()
+      setShareToken(data.token)
+    }
+    setShareLoading(false)
+  }
+
+  async function handleRevokeShare() {
+    if (!shareToken) return
+    const token = await getToken()
+    if (!token) return
+    await fetch(`${API}/api/v1/share/${shareToken}`, {
+      method: 'DELETE',
+      headers: { Authorization: `Bearer ${token}` },
+    })
+    setShareToken(null)
+    setShareCopied(false)
+    setShowShareModal(false)
+  }
+
+  function handleCopyShareLink() {
+    if (!shareToken) return
+    const url = `${window.location.origin}/share/${shareToken}`
+    navigator.clipboard.writeText(url)
+    setShareCopied(true)
+    setTimeout(() => setShareCopied(false), 2000)
+  }
+
   async function handleSignOut() {
     await supabase.auth.signOut()
     router.push('/login')
@@ -368,6 +489,17 @@ export default function Dashboard() {
           saving={savingStyle}
           onSelect={handleSelectStyle}
           onClose={positions.length > 0 ? () => setShowStyleModal(false) : undefined}
+        />
+      )}
+
+      {showShareModal && (
+        <ShareModal
+          token={shareToken}
+          loading={shareLoading}
+          copied={shareCopied}
+          onCopy={handleCopyShareLink}
+          onRevoke={handleRevokeShare}
+          onClose={() => setShowShareModal(false)}
         />
       )}
 
@@ -397,6 +529,16 @@ export default function Dashboard() {
             )}
           </div>
           <div className="flex items-center gap-3">
+            {positions.length > 0 && (
+              <button onClick={handleOpenShare}
+                className="flex items-center gap-2 text-sm bg-white/[0.06] hover:bg-white/[0.09] border border-white/[0.08] px-4 py-2 rounded-xl transition"
+              >
+                <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.8}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M8.684 13.342C8.886 12.938 9 12.482 9 12c0-.482-.114-.938-.316-1.342m0 2.684a3 3 0 110-2.684m0 2.684l6.632 3.316m-6.632-6l6.632-3.316m0 0a3 3 0 105.367-2.684 3 3 0 00-5.367 2.684zm0 9.316a3 3 0 105.368 2.684 3 3 0 00-5.368-2.684z" />
+                </svg>
+                Share
+              </button>
+            )}
             <button onClick={() => setShowImport(!showImport)}
               className="flex items-center gap-2 text-sm bg-white/[0.06] hover:bg-white/[0.09] border border-white/[0.08] px-4 py-2 rounded-xl transition"
             >

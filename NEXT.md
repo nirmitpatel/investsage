@@ -6,9 +6,6 @@ _Say "execute next" to run the top unchecked item. Completed tasks are auto-stri
 
 ## P2 — Features
 
-- [ ] **Email digest notifications** — weekly "your health score changed" or "new tax opportunity" email
-- [ ] **Shareable portfolio report** — one-click PDF or read-only shareable link for dashboard snapshot
-- [ ] **Capture account type from Fidelity CSV** — `Account Name/Number` column is parsed but discarded; detect `401k`, `Roth 401(k)`, `Individual`, `IRA` etc.; store `account_type` on positions; use it to split personal vs retirement views
 - [ ] **Account-aware AI recommendations** — suppress Buy/Hold/Sell for 401k positions; replace with rebalancing suggestions within available fund options
 - [ ] **401k retirement alignment scoring** — collect retirement year from user profile; compare actual 401k equity/bond split against expected glide path; surface as a dedicated health card
 - [ ] **Smart tax-loss harvest + reallocation** — cross-reference sector weight and trend when surfacing harvest opportunities; suggest redeploying into underweight outperforming sectors or peer stocks; explain wash-sale window
@@ -25,3 +22,4 @@ _Say "execute next" to run the top unchecked item. Completed tasks are auto-stri
 - [ ] **Rate limiting on AI endpoints** — `/analyze` and `/recommend` call Claude API; add per-user rate limits to control cost
 - [ ] **Backend error monitoring** — add Sentry (or similar) to Railway deployment for visibility into 500s
 - [ ] **`.env.local.example` audit** — ensure all required vars are documented for a clean local setup
+- [ ] **Email digest notifications** — weekly "your health score changed" or "new tax opportunity" email
