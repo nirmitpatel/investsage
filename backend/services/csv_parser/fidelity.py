@@ -41,6 +41,29 @@ POSITIONS_COLUMNS = [
 ]
 
 
+RETIREMENT_ACCOUNT_TYPES = {"401k", "roth_401k", "ira", "roth_ira", "rollover_ira", "sep_ira", "hsa"}
+
+
+def detect_account_type(account_name: str) -> str:
+    """Classify a Fidelity account name string into a normalized account type."""
+    s = account_name.upper()
+    if "ROTH" in s and "401" in s:
+        return "roth_401k"
+    if "401" in s:
+        return "401k"
+    if "ROTH" in s and "IRA" in s:
+        return "roth_ira"
+    if "SEP" in s and "IRA" in s:
+        return "sep_ira"
+    if "ROLLOVER" in s and "IRA" in s:
+        return "rollover_ira"
+    if "IRA" in s:
+        return "ira"
+    if "HSA" in s or "HEALTH SAVINGS" in s:
+        return "hsa"
+    return "individual"
+
+
 def _clean_number(value: str) -> float | None:
     if not value or value.strip() in ("", "--", "N/A"):
         return None
@@ -78,6 +101,7 @@ def parse_fidelity_positions(csv_text: str) -> List[Dict[str, Any]]:
         if len(symbol) > 6:
             continue
 
+        account_name = (row.get("Account Name/Number") or "").strip()
         positions.append({
             "symbol": symbol,
             "description": (row.get("Description") or "").strip(),
@@ -89,6 +113,7 @@ def parse_fidelity_positions(csv_text: str) -> List[Dict[str, Any]]:
             "total_gain_loss_percent": _clean_number(row.get("Total Gain/Loss Percent", "")),
             "percent_of_account": _clean_number(row.get("Percent Of Account", "")),
             "average_cost_basis": _clean_number(row.get("Average Cost Basis", "")),
+            "account_type": detect_account_type(account_name) if account_name else "individual",
         })
 
     return positions
