@@ -239,7 +239,7 @@ def calculate_diversification_score(
             elif pct > sector_med_pct:
                 score -= 6
     if n < 5:
-        score -= 8
+        score -= 12
     elif n < 10:
         score -= 4
     return max(0.0, score)
