@@ -14,6 +14,9 @@ from typing import List, Dict, Any, Optional, Tuple
 # Default federal tax rates — top bracket (used when user has no bracket set)
 DEFAULT_SHORT_TERM_RATE = 0.37   # short-term = ordinary income (37% top bracket)
 DEFAULT_LONG_TERM_RATE = 0.20    # long-term (20% for 37% bracket)
+# Backwards-compatible aliases used by existing tests
+SHORT_TERM_RATE = DEFAULT_SHORT_TERM_RATE
+LONG_TERM_RATE = DEFAULT_LONG_TERM_RATE
 
 # Long-term rate by federal bracket (IRS 2024 capital gains brackets)
 LTCG_RATE_BY_BRACKET: Dict[float, float] = {
