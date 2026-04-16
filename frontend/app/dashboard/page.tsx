@@ -329,7 +329,7 @@ export default function Dashboard() {
         setRecommendations(r => ({ ...r, [symbol]: data }))
       } else {
         const err = await res.json().catch(() => ({}))
-        setRecErrors(e => ({ ...e, [symbol]: err.detail ?? 'AI request failed' }))
+        setRecErrors(e => ({ ...e, [symbol]: err.detail ?? 'Sage request failed' }))
       }
     } catch {
       setRecErrors(e => ({ ...e, [symbol]: 'Network error' }))

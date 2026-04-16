@@ -7,7 +7,7 @@ type ActivePage = 'portfolio' | 'tax' | 'insights' | 'analytics'
 const NAV_ITEMS: { key: ActivePage; label: string; href: string; icon: React.ReactNode }[] = [
   { key: 'portfolio', label: 'Portfolio', href: '/dashboard', icon: <GridIcon /> },
   { key: 'tax', label: 'Tax', href: '/tax', icon: <LeafIcon /> },
-  { key: 'insights', label: 'AI Insights', href: '/insights', icon: <SparkleIcon /> },
+  { key: 'insights', label: 'Sage Insights', href: '/insights', icon: <SparkleIcon /> },
   { key: 'analytics', label: 'Analytics', href: '/analytics', icon: <ChartIcon /> },
 ]
 

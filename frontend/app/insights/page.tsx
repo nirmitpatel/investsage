@@ -76,8 +76,8 @@ export default function InsightsPage() {
       {/* Main */}
       <main className="flex-1 overflow-y-auto pb-16 md:pb-0">
         <div className="sticky top-0 z-10 bg-[#0a0a0f]/80 backdrop-blur border-b border-white/[0.06] px-4 md:px-8 py-4">
-          <h1 className="text-lg font-semibold">AI Insights</h1>
-          <p className="text-xs text-gray-500 mt-0.5">Plain-English portfolio analysis powered by Claude</p>
+          <h1 className="text-lg font-semibold">Sage Insights</h1>
+          <p className="text-xs text-gray-500 mt-0.5">Plain-English portfolio analysis powered by Sage</p>
         </div>
 
         <div className="px-4 md:px-8 py-6 space-y-6 max-w-3xl">
@@ -89,7 +89,7 @@ export default function InsightsPage() {
               </div>
               <p className="text-white font-semibold mb-1">Get your portfolio analysis</p>
               <p className="text-gray-500 text-sm mb-6 max-w-sm mx-auto">
-                Claude will analyze your portfolio health, sector exposure, and tax opportunities — and explain what it all means in plain English.
+                Sage will analyze your portfolio health, sector exposure, and tax opportunities — and explain what it all means in plain English.
               </p>
               <button
                 onClick={handleAnalyze}
@@ -140,7 +140,7 @@ export default function InsightsPage() {
                 <div className="flex items-center gap-2 mb-4">
                   <SparkleIcon />
                   <span className="font-semibold text-violet-300">Portfolio Summary</span>
-                  <span className="text-xs text-gray-600 ml-auto">Powered by Claude</span>
+                  <span className="text-xs text-gray-600 ml-auto">Powered by Sage</span>
                 </div>
                 <p className="text-gray-200 leading-relaxed text-[15px]">{result.summary}</p>
               </div>

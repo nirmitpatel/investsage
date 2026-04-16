@@ -46,7 +46,7 @@ export default function LandingPage() {
           <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
             <path strokeLinecap="round" strokeLinejoin="round" d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z" />
           </svg>
-          Powered by Claude AI
+          Powered by Sage
         </div>
         <h1 className="text-5xl sm:text-6xl font-bold tracking-tight mb-6 leading-tight">
           Your portfolio,{' '}
@@ -55,7 +55,7 @@ export default function LandingPage() {
           </span>
         </h1>
         <p className="text-gray-400 text-lg sm:text-xl max-w-2xl mx-auto mb-10 leading-relaxed">
-          Import your Fidelity portfolio and get instant AI-powered insights — health score, sector exposure, tax-loss opportunities, and plain-English explanations of every position.
+          Import your Fidelity portfolio and get instant Sage-powered insights — health score, sector exposure, tax-loss opportunities, and plain-English explanations of every position.
         </p>
         <div className="flex items-center justify-center gap-3 flex-wrap">
           <button
@@ -95,14 +95,14 @@ export default function LandingPage() {
           <FeatureCard
             icon="✨"
             iconBg="bg-violet-500/10 border-violet-500/20"
-            title="AI Insights"
-            desc="Claude analyzes your full portfolio and explains what it means in plain English — no finance degree required."
+            title="Sage Insights"
+            desc="Sage analyzes your full portfolio and explains what it means in plain English — no finance degree required."
           />
           <FeatureCard
             icon="⚡"
             iconBg="bg-orange-500/10 border-orange-500/20"
             title="Sell / Hold / Buy"
-            desc="Get an AI recommendation on every position based on your portfolio context and investment style."
+            desc="Get a Sage recommendation on every position based on your portfolio context and investment style."
           />
           <FeatureCard
             icon="📊"
@@ -121,7 +121,7 @@ export default function LandingPage() {
           {[
             { n: '1', title: 'Create account', desc: 'Sign up with email. Free to use.' },
             { n: '2', title: 'Import from Fidelity', desc: 'Download your positions CSV and upload it. Transactions CSV unlocks tax features.' },
-            { n: '3', title: 'Get insights', desc: 'Your health score, sector breakdown, AI analysis, and tax opportunities are instantly ready.' },
+            { n: '3', title: 'Get insights', desc: 'Your health score, sector breakdown, Sage analysis, and tax opportunities are instantly ready.' },
           ].map(step => (
             <div key={step.n} className="bg-white/[0.03] border border-white/[0.08] rounded-2xl p-6 text-left">
               <div className="w-8 h-8 rounded-lg bg-violet-500/15 border border-violet-500/20 flex items-center justify-center text-sm font-bold text-violet-400 mb-4">

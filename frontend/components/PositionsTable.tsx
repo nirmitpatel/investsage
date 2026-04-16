@@ -246,7 +246,7 @@ export default function PositionsTable({ positions, loadingRec, recommendations,
                   <path strokeLinecap="round" strokeLinejoin="round" d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z" />
                 </svg>
               )}
-              {loadingAll ? 'Analyzing…' : pending.length === 0 ? 'All analyzed' : `Ask AI for all`}
+              {loadingAll ? 'Analyzing…' : pending.length === 0 ? 'All analyzed' : `Ask Sage for all`}
             </button>
           </div>
         )}
@@ -255,7 +255,7 @@ export default function PositionsTable({ positions, loadingRec, recommendations,
         <table className="w-full min-w-[700px] text-sm">
           <thead>
             <tr className="border-b border-white/[0.06]">
-              {['Symbol', 'Sector', 'Shares', 'Price', 'Value', 'Cost Basis', 'Gain / Loss', '%', 'Day', ...(readOnly ? [] : ['AI'])].map((h, i) => (
+              {['Symbol', 'Sector', 'Shares', 'Price', 'Value', 'Cost Basis', 'Gain / Loss', '%', 'Day', ...(readOnly ? [] : ['Sage'])].map((h, i) => (
                 <th key={h} className={`px-5 py-3.5 text-xs font-medium text-gray-500 uppercase tracking-wider ${i < 2 ? 'text-left' : 'text-right'}`}>{h}</th>
               ))}
             </tr>
@@ -344,7 +344,7 @@ export default function PositionsTable({ positions, loadingRec, recommendations,
                         onClick={() => onGetRecommendation(p.symbol)}
                         className="text-xs text-gray-600 hover:text-violet-400 border border-white/[0.06] hover:border-violet-500/30 px-2.5 py-1 rounded-lg transition"
                       >
-                        Ask AI
+                        Ask Sage
                       </button>
                     )}
                   </td>

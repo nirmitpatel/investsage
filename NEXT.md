@@ -11,7 +11,6 @@ _Say "execute next" to run the top unchecked item. Completed tasks are auto-stri
 ## P2 — Features
 
 ### Sell/Hold/Buy Analyzer Completion
-- [ ] **Four-factor recommendation framework** — design specifies equal 25% weights across: Performance Trajectory (gain%, 30d/90d trend, vs sector, vs S&P), Thesis Validity (fundamentals, competitive landscape, news sentiment, analyst ratings), Portfolio Fit (sizing, conflicts, redundancy, sector allocation), Tax & Timing (holding period, harvest value, earnings dates); current implementation only uses sector trend + position weight
 - [ ] **Integrate tax data into recommendations** — when a position has harvestable losses, factor tax savings value into the SELL signal; a position barely worth selling on performance alone may be a clear sell when the tax benefit is included (FR-SHA-007)
 - [ ] **Opportunity cost calculator** — show what capital freed from a losing position could earn if redeployed to the best-performing sector or position in the portfolio (FR-SHA-005)
 

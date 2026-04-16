@@ -90,7 +90,7 @@ export default function LoginPage() {
             </div>
             <span className="text-2xl font-bold tracking-tight">InvestSage</span>
           </div>
-          <p className="text-gray-400 text-sm">AI-powered portfolio intelligence</p>
+          <p className="text-gray-400 text-sm">Sage-powered portfolio intelligence</p>
         </div>
 
         <div className="bg-white/[0.04] border border-white/[0.08] rounded-2xl p-8 backdrop-blur-sm shadow-2xl">

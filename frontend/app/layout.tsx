@@ -3,7 +3,7 @@ import "./globals.css";
 
 export const metadata: Metadata = {
   title: "InvestSage",
-  description: "AI-Powered Portfolio Intelligence",
+  description: "Sage-Powered Portfolio Intelligence",
 };
 
 export default function RootLayout({

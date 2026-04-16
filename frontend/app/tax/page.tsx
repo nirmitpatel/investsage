@@ -379,7 +379,7 @@ function OpportunityCard({
       {explanation ? (
         <div className="bg-violet-500/5 border border-violet-500/20 rounded-xl px-4 py-3">
           <p className="text-xs font-semibold text-violet-400 mb-1 flex items-center gap-1.5">
-            <SparkleIcon small /> AI Analysis
+            <SparkleIcon small /> Sage Analysis
           </p>
           <p className="text-sm text-gray-300 leading-relaxed">{explanation}</p>
         </div>
