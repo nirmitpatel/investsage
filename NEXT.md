@@ -13,8 +13,6 @@ _Say "execute next" to run the top unchecked item. Completed tasks are auto-stri
 ### Sell/Hold/Buy Analyzer Completion
 
 ### Execution Plan Generator (Feature 3B — not started)
-- [ ] **Execution plan backend** — new endpoint `GET /api/v1/analysis/execution-plan`; takes all SELL recommendations + tax opportunities; produces ordered sequence: sells first (ranked by tax savings), then buys (ranked by conviction + sizing need); verifies cash flow never goes negative; flags wash sale windows; tracks holding period deadlines
-- [ ] **Execution plan UI** — new page or modal showing the plan as a step-by-step timeline; each action shows proceeds/cost and running cash balance; wash sale notes and holding period warnings inline; interactive checklist for marking steps complete
 
 ### Portfolio Simulation and Before/After Tracker (Feature 3C — not started)
 - [ ] **Schema: recommendation_outcomes + ai_training_feedback** — add two missing tables from design: `recommendation_outcomes` (tracks actual vs shadow portfolio value at 30/60/90/180/365 day intervals) and `ai_training_feedback` (records outcome correctness, factor scores, sector, market condition for AI learning loop)

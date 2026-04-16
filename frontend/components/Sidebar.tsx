@@ -2,11 +2,12 @@
 
 import { useRouter } from 'next/navigation'
 
-type ActivePage = 'portfolio' | 'tax' | 'insights' | 'analytics'
+type ActivePage = 'portfolio' | 'tax' | 'execution-plan' | 'insights' | 'analytics'
 
 const NAV_ITEMS: { key: ActivePage; label: string; href: string; icon: React.ReactNode }[] = [
   { key: 'portfolio', label: 'Portfolio', href: '/dashboard', icon: <GridIcon /> },
   { key: 'tax', label: 'Tax', href: '/tax', icon: <LeafIcon /> },
+  { key: 'execution-plan', label: 'Execution Plan', href: '/execution-plan', icon: <ChecklistIcon /> },
   { key: 'insights', label: 'Sage Insights', href: '/insights', icon: <SparkleIcon /> },
   { key: 'analytics', label: 'Analytics', href: '/analytics', icon: <ChartIcon /> },
 ]
@@ -89,4 +90,7 @@ function SparkleIcon() {
 }
 function ChartIcon() {
   return <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.8}><path strokeLinecap="round" strokeLinejoin="round" d="M7 12l3-3 3 3 4-4M8 21l4-4 4 4M3 4h18M4 4h16v12a1 1 0 01-1 1H5a1 1 0 01-1-1V4z" /></svg>
+}
+function ChecklistIcon() {
+  return <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.8}><path strokeLinecap="round" strokeLinejoin="round" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4" /></svg>
 }

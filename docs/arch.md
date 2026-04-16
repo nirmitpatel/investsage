@@ -33,6 +33,7 @@ POST /api/v1/tax/opportunities/{symbol}/explain
 POST /api/v1/ai/analyze                   — full analysis (Sonnet)
 POST /api/v1/ai/position/{symbol}/recommend — Sell/Hold/Buy (Haiku)
 GET  /api/v1/analytics                    — SPY comparison, performers, sector P&L
+GET  /api/v1/analysis/execution-plan      — ordered sell→buy plan from tax-loss opportunities
 ```
 
 ## DB tables (Supabase)
@@ -48,8 +49,9 @@ app/
   reset-password/       — Handles Supabase recovery token
   dashboard/page.tsx    — Portfolio overview, health score, positions table
   tax/page.tsx          — Tax-loss harvesting opportunities
-  insights/page.tsx     — On-demand AI portfolio analysis
-  analytics/page.tsx    — SPY comparison, performers, sector P&L
+  insights/page.tsx          — On-demand AI portfolio analysis
+  analytics/page.tsx         — SPY comparison, performers, sector P&L
+  execution-plan/page.tsx    — Step-by-step tax-loss harvest execution plan with interactive checklist
 
 components/
   Sidebar.tsx           — Shared sidebar nav
