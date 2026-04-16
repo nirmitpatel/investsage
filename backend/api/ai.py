@@ -120,6 +120,7 @@ def _recommend_sync(symbol: str, portfolio: dict, positions: list) -> dict:
     # Purchase pattern + tax timing from tax lots
     purchase_pattern: dict = {}
     tax_timing: dict = {}
+    tax_opportunity: dict = {}
     if account_type not in RETIREMENT_ACCOUNT_TYPES:
         user_id = portfolio.get("user_id")
         if user_id:
@@ -128,6 +129,23 @@ def _recommend_sync(symbol: str, portfolio: dict, positions: list) -> dict:
             current_price = position.get("current_price")
             purchase_pattern = analyze_purchase_pattern(symbol_lots, current_price)
             tax_timing = _compute_tax_timing(symbol_lots)
+            # Compute quantified tax savings for this symbol (used to boost SELL signal)
+            if current_price and symbol_lots:
+                federal = portfolio.get("federal_tax_bracket")
+                state = portfolio.get("state_tax_bracket")
+                sector_map = {symbol: position.get("sector")}
+                opps = find_tax_opportunities(symbol_lots, {symbol: current_price}, sector_map, federal, state)
+                if opps:
+                    tax_opportunity = {
+                        "tax_savings_estimate": round(sum(o["tax_savings_estimate"] for o in opps), 2),
+                        "unrealized_loss": round(sum(o["unrealized_loss"] for o in opps), 2),
+                        "has_short_term": any(o["is_short_term"] for o in opps),
+                        "urgency": (
+                            "high" if any(o.get("urgency") == "high" for o in opps)
+                            else "medium" if any(o.get("urgency") == "medium" for o in opps)
+                            else None
+                        ),
+                    }
 
     # Portfolio fit: conflicts and redundancies for this symbol
     portfolio_fit = check_symbol_portfolio_fit(symbol, positions)
@@ -144,11 +162,67 @@ def _recommend_sync(symbol: str, portfolio: dict, positions: list) -> dict:
         "price_performance": price_performance,
         "portfolio_fit": portfolio_fit,
         "tax_timing": tax_timing,
+        "tax_opportunity": tax_opportunity,
     }
 
     if account_type in RETIREMENT_ACCOUNT_TYPES:
         return generate_rebalance_suggestion(position, portfolio_context)
-    return generate_sell_hold_buy(position, portfolio_context)
+    result = generate_sell_hold_buy(position, portfolio_context)
+    if result.get("recommendation") == "SELL":
+        opp = _compute_opportunity_cost(symbol, positions, period, trend_period_label)
+        if opp:
+            result["opportunity_cost"] = opp
+    return result
+
+
+def _compute_opportunity_cost(symbol: str, positions: list, period: str, trend_period_label: str) -> dict:
+    """Compute what freed capital from selling `symbol` could earn if redeployed."""
+    position = next((p for p in positions if p["symbol"] == symbol), None)
+    if not position:
+        return {}
+    freed_capital = position.get("current_value") or 0
+    if freed_capital <= 0:
+        return {}
+
+    others = [
+        p for p in positions
+        if p["symbol"] != symbol
+        and p.get("account_type", "individual") not in RETIREMENT_ACCOUNT_TYPES
+    ]
+
+    result: dict = {"freed_capital": round(freed_capital, 2)}
+
+    # Best position by all-time total return %
+    performers = [p for p in others if (p.get("total_gain_loss_percent") or 0) > 0]
+    if performers:
+        best = max(performers, key=lambda p: p.get("total_gain_loss_percent") or 0)
+        result["best_position"] = {
+            "symbol": best["symbol"],
+            "name": best.get("name") or best["symbol"],
+            "return_pct": round(best.get("total_gain_loss_percent") or 0, 2),
+        }
+
+    # Best sector by ETF trend (batch fetch for all portfolio sectors)
+    try:
+        sectors = list({
+            SECTOR_NAME_NORMALIZE.get(p.get("sector") or "", p.get("sector") or "")
+            for p in others
+            if p.get("sector") not in (None, "", "ETF", "Mutual Fund", "Unknown")
+        } - {"ETF", "Mutual Fund", "Unknown", ""})
+        if sectors:
+            sector_trends = fetch_sector_etf_performance(sectors, period=period)
+            positive_trends = {s: v for s, v in sector_trends.items() if v and v > 0}
+            if positive_trends:
+                best_sector = max(positive_trends, key=positive_trends.get)
+                result["best_sector"] = {
+                    "name": best_sector,
+                    "return_pct": round(positive_trends[best_sector], 2),
+                    "period": trend_period_label,
+                }
+    except Exception:
+        pass
+
+    return result if len(result) > 1 else {}
 
 
 @router.post("/position/{symbol}/recommend")

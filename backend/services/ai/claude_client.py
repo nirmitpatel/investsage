@@ -305,7 +305,12 @@ def _format_portfolio_fit_factor(
     return "\n".join(lines)
 
 
-def _format_tax_timing_factor(tax_timing: dict, gain_abs: float, pattern_section: str) -> str:
+def _format_tax_timing_factor(
+    tax_timing: dict,
+    gain_abs: float,
+    pattern_section: str,
+    tax_opportunity: dict | None = None,
+) -> str:
     short = tax_timing.get("short_term_lots", 0)
     long_ = tax_timing.get("long_term_lots", 0)
     days_to_lt = tax_timing.get("days_to_long_term")
@@ -325,7 +330,14 @@ def _format_tax_timing_factor(tax_timing: dict, gain_abs: float, pattern_section
         tax_note = "short-term capital gains" if short > 0 else "long-term capital gains"
         lines.append(f"- Tax status: ${gain_abs:,.0f} unrealized gain — selling triggers {tax_note}")
     elif gain_abs < 0:
-        lines.append(f"- Tax status: ${abs(gain_abs):,.0f} harvestable loss — selling generates a tax benefit")
+        savings = (tax_opportunity or {}).get("tax_savings_estimate", 0)
+        if savings > 0:
+            lines.append(
+                f"- Tax status: ${abs(gain_abs):,.0f} harvestable loss — "
+                f"selling generates ~${savings:,.0f} estimated tax benefit"
+            )
+        else:
+            lines.append(f"- Tax status: ${abs(gain_abs):,.0f} harvestable loss — selling generates a tax benefit")
     if pattern_section:
         lines.append(pattern_section)
     return "\n".join(lines)
@@ -347,6 +359,7 @@ def generate_sell_hold_buy(position: dict, portfolio_context: dict) -> dict:
     price_performance = portfolio_context.get('price_performance') or {}
     portfolio_fit = portfolio_context.get('portfolio_fit') or {}
     tax_timing = portfolio_context.get('tax_timing') or {}
+    tax_opportunity = portfolio_context.get('tax_opportunity') or {}
 
     current_price = position.get("current_price") or position.get("last_price")
     thesis_section = _format_signals_section(fmp, current_price)
@@ -362,7 +375,7 @@ def generate_sell_hold_buy(position: dict, portfolio_context: dict) -> dict:
 
     factor1 = _format_performance_factor(gain_pct, gain_abs, price_performance, sector_trend, trend_period)
     factor3 = _format_portfolio_fit_factor(pos_weight, avg_weight, portfolio_fit, style, style_guidance)
-    factor4 = _format_tax_timing_factor(tax_timing, gain_abs, pattern_section)
+    factor4 = _format_tax_timing_factor(tax_timing, gain_abs, pattern_section, tax_opportunity)
 
     thesis_block = (
         thesis_section.strip()
@@ -375,6 +388,16 @@ def generate_sell_hold_buy(position: dict, portfolio_context: dict) -> dict:
         "This is a critical signal — weight strongly toward SELL unless there is a compelling fundamental reason to hold."
         if is_failed_averaging_down else ""
     )
+
+    tax_savings_est = tax_opportunity.get("tax_savings_estimate", 0)
+    tax_boost_note = ""
+    if tax_savings_est >= 200:
+        tax_boost_note = (
+            f"\n⚠️  TAX HARVESTING SIGNAL: Selling generates an estimated ${tax_savings_est:,.0f} tax benefit "
+            f"(unrealized loss × user's tax rate). Factor this into the SELL/HOLD decision — "
+            "a position that would otherwise be a marginal HOLD should be upgraded to SELL "
+            "when weak fundamentals or poor momentum combine with a material tax benefit."
+        )
 
     prompt = f"""You are a professional financial analyst. Evaluate whether to SELL, HOLD, or BUY MORE this position by weighing four factors equally (25% each).
 
@@ -393,7 +416,7 @@ Current value: ${position.get('current_value', 0):,.2f}
 
 ━━ FACTOR 4: TAX & TIMING ━━
 {factor4}
-{failed_avg_note}
+{failed_avg_note}{tax_boost_note}
 
 Rules:
 - All-time personal return is from the investor's purchase date — do NOT compare to the sector trend period (different timeframes).
@@ -403,7 +426,7 @@ Rules:
 Decision thresholds:
 - BUY_MORE: Momentum strong (factor 1) + thesis intact (factor 2) + position underweight or well-sized (factor 3) + tax-efficient (factor 4)
 - HOLD: Thesis solid but no strong buy signal, or tax timing argues for patience, or mixed factors
-- SELL: Thesis broken or analysts strongly negative (factor 2) AND poor momentum or overweight
+- SELL: Thesis broken or analysts strongly negative (factor 2) AND poor momentum or overweight; OR weak fundamentals/momentum AND material tax harvesting benefit makes selling clearly advantageous
 
 Respond in this exact JSON format:
 {{

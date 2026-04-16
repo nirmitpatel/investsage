@@ -149,6 +149,35 @@ function RecBadge({ rec }: { rec: any }) {
               ))}
             </ul>
           )}
+          {rec.recommendation === 'SELL' && rec.opportunity_cost && (
+            <div className="mt-3 pt-3 border-t border-white/[0.08]">
+              <p className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-2">Opportunity Cost</p>
+              <p className="text-xs text-gray-500 mb-2">
+                Capital freed:{' '}
+                <span className="text-white font-medium">
+                  ${rec.opportunity_cost.freed_capital.toLocaleString('en-US', { maximumFractionDigits: 0 })}
+                </span>
+              </p>
+              {rec.opportunity_cost.best_position && (
+                <p className="text-xs text-gray-500 mb-1.5">
+                  Best performer:{' '}
+                  <span className="text-emerald-400 font-medium">{rec.opportunity_cost.best_position.symbol}</span>
+                  {' '}
+                  <span className="text-emerald-400">+{rec.opportunity_cost.best_position.return_pct}%</span>
+                  <span className="text-gray-600"> all-time</span>
+                </p>
+              )}
+              {rec.opportunity_cost.best_sector && (
+                <p className="text-xs text-gray-500">
+                  Strongest sector:{' '}
+                  <span className="text-emerald-400 font-medium">{rec.opportunity_cost.best_sector.name}</span>
+                  {' '}
+                  <span className="text-emerald-400">+{rec.opportunity_cost.best_sector.return_pct}%</span>
+                  <span className="text-gray-600"> ({rec.opportunity_cost.best_sector.period} trend)</span>
+                </p>
+              )}
+            </div>
+          )}
         </div>
       )}
     </div>

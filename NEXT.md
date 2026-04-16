@@ -11,8 +11,6 @@ _Say "execute next" to run the top unchecked item. Completed tasks are auto-stri
 ## P2 — Features
 
 ### Sell/Hold/Buy Analyzer Completion
-- [ ] **Integrate tax data into recommendations** — when a position has harvestable losses, factor tax savings value into the SELL signal; a position barely worth selling on performance alone may be a clear sell when the tax benefit is included (FR-SHA-007)
-- [ ] **Opportunity cost calculator** — show what capital freed from a losing position could earn if redeployed to the best-performing sector or position in the portfolio (FR-SHA-005)
 
 ### Execution Plan Generator (Feature 3B — not started)
 - [ ] **Execution plan backend** — new endpoint `GET /api/v1/analysis/execution-plan`; takes all SELL recommendations + tax opportunities; produces ordered sequence: sells first (ranked by tax savings), then buys (ranked by conviction + sizing need); verifies cash flow never goes negative; flags wash sale windows; tracks holding period deadlines
