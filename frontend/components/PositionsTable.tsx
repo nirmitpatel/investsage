@@ -80,8 +80,14 @@ function RecBadge({ rec }: { rec: any }) {
     BUY_MORE: 'bg-emerald-500/15 text-emerald-400 border-emerald-500/30',
     SELL: 'bg-red-500/15 text-red-400 border-red-500/30',
     HOLD: 'bg-yellow-500/15 text-yellow-400 border-yellow-500/30',
+    REDUCE: 'bg-orange-500/15 text-orange-400 border-orange-500/30',
+    MAINTAIN: 'bg-yellow-500/15 text-yellow-400 border-yellow-500/30',
+    INCREASE: 'bg-emerald-500/15 text-emerald-400 border-emerald-500/30',
   }
-  const label: Record<string, string> = { BUY_MORE: 'BUY MORE', SELL: 'SELL', HOLD: 'HOLD' }
+  const label: Record<string, string> = {
+    BUY_MORE: 'BUY MORE', SELL: 'SELL', HOLD: 'HOLD',
+    REDUCE: 'REDUCE', MAINTAIN: 'MAINTAIN', INCREASE: 'INCREASE',
+  }
   const color = colors[rec.recommendation] ?? 'bg-gray-500/15 text-gray-400 border-gray-500/30'
 
   function handleMouseEnter() {

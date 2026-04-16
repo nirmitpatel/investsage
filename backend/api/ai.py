@@ -10,7 +10,9 @@ from services.market_data.yfinance_client import fetch_prices
 from services.health_score import calculate_health_score, build_effective_sector_values
 from services.market_data.yfinance_client import fetch_fund_sector_weightings, fetch_sector_etf_performance, SECTOR_NAME_NORMALIZE
 from services.tax_savings import find_tax_opportunities, summarize_tax_opportunities
-from services.ai.claude_client import analyze_portfolio, generate_sell_hold_buy
+from services.ai.claude_client import analyze_portfolio, generate_sell_hold_buy, generate_rebalance_suggestion
+from services.market_data.fmp_client import fetch_analyst_fundamentals
+from services.csv_parser.fidelity import RETIREMENT_ACCOUNT_TYPES
 from api.portfolio import STYLE_TREND_PERIOD
 from dependencies import get_current_user
 
@@ -72,13 +74,25 @@ def _recommend_sync(symbol: str, portfolio: dict, positions: list) -> dict:
         "3y": "3-year", "3mo": "3-month", "10y": "10-year"
     }.get(period, period)
 
+    account_type = position.get("account_type", "individual")
+
+    # Fetch FMP fundamentals for non-retirement individual stock positions
+    fmp_data = {}
+    if account_type not in RETIREMENT_ACCOUNT_TYPES and raw_sector not in ("ETF", "Mutual Fund"):
+        fmp_data = fetch_analyst_fundamentals(symbol)
+
     portfolio_context = {
         "total_value": total_value,
         "position_count": len(positions),
         "investment_style": investment_style,
         "sector_trend": sector_trend,
         "trend_period": trend_period_label,
+        "account_type": account_type,
+        "fmp": fmp_data,
     }
+
+    if account_type in RETIREMENT_ACCOUNT_TYPES:
+        return generate_rebalance_suggestion(position, portfolio_context)
     return generate_sell_hold_buy(position, portfolio_context)
 
 
