@@ -19,6 +19,7 @@ interface Health {
   position_count: number
   issues: { type: string; severity: string; message: string }[]
   notes: string[]
+  opportunities: string[]
   sector_breakdown: SectorBreakdownItem[]
   investment_style: InvestmentStyle
   market_trends_period: string

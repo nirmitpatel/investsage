@@ -40,6 +40,7 @@ interface Health {
   position_count: number
   issues: HealthIssue[]
   notes: string[]
+  opportunities: string[]
   sector_breakdown: SectorBreakdownItem[]
   investment_style: InvestmentStyle
   market_trends_period: string
@@ -767,6 +768,26 @@ export default function Dashboard() {
                   <div key={i} className={`flex items-start gap-3 border rounded-xl px-4 py-3 ${severityStyle(issue.severity)}`}>
                     <span className={`mt-1.5 w-1.5 h-1.5 rounded-full shrink-0 ${severityDot(issue.severity)}`} />
                     <p className="text-sm leading-relaxed">{issue.message}</p>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* Opportunities */}
+          {health?.opportunities && health.opportunities.length > 0 && (
+            <div className="bg-white/[0.03] border border-white/[0.08] rounded-2xl p-6">
+              <h2 className="font-semibold mb-4 flex items-center gap-2">
+                <svg className="w-4 h-4 text-emerald-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6" />
+                </svg>
+                Opportunities
+              </h2>
+              <div className="space-y-2">
+                {health.opportunities.map((opp, i) => (
+                  <div key={i} className="flex items-start gap-3 border border-emerald-500/20 bg-emerald-500/5 rounded-xl px-4 py-3">
+                    <span className="mt-1.5 w-1.5 h-1.5 rounded-full shrink-0 bg-emerald-400" />
+                    <p className="text-sm leading-relaxed text-emerald-100/80">{opp}</p>
                   </div>
                 ))}
               </div>

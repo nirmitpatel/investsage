@@ -124,13 +124,18 @@ def detect_conflicting_bets(
 
 def detect_redundancies(
     positions: List[Dict[str, Any]],
+    investment_style: InvestmentStyle = None,
 ) -> Tuple[List[Dict[str, Any]], float]:
     """
     Detect positions that serve the same portfolio function.
     Returns (issues, score_deduction).
 
     Flags when the user holds ≥ threshold positions from a FUNCTIONAL_OVERLAPS category.
+    Skipped entirely for beat_the_market — sector concentration is intentional there.
     """
+    if investment_style == "beat_the_market":
+        return [], 0.0
+
     held = {p["symbol"]: p for p in positions}
     issues: List[Dict[str, Any]] = []
     deduction = 0.0
@@ -310,6 +315,7 @@ def calculate_health_score(
             "position_count": 0,
             "issues": [],
             "notes": [],
+            "opportunities": [],
             "sector_breakdown": [],
             "investment_style": investment_style,
             "market_trends_period": trend_period_label,
@@ -325,6 +331,7 @@ def calculate_health_score(
     total_gain_loss = sum(p.get("total_gain_loss") or 0 for p in positions)
     issues: List[Dict[str, Any]] = []
     notes: List[str] = []
+    opportunities: List[str] = []
 
     is_safe = investment_style == "play_it_safe"
     is_long = investment_style == "long_game"
@@ -492,7 +499,7 @@ def calculate_health_score(
             held_pct = (sector_values_analysis.get(sector, 0) / total_value * 100)
             if held_pct < 5:
                 exposure_str = "no exposure" if held_pct < 0.5 else f"only {held_pct:.0f}% exposure"
-                notes.append(
+                opportunities.append(
                     f"{sector} is up {trend:.1f}% ({trend_period_label}) and you have {exposure_str}. "
                     f"For a {style_label} strategy, this could be an opportunity worth exploring."
                 )
@@ -509,7 +516,7 @@ def calculate_health_score(
 
     # ── Conflicting bets + redundancy ─────────────────────────────────────
     conflict_issues, conflict_deduction = detect_conflicting_bets(positions)
-    redundancy_issues, redundancy_deduction = detect_redundancies(positions)
+    redundancy_issues, redundancy_deduction = detect_redundancies(positions, investment_style)
     issues.extend(conflict_issues)
     issues.extend(redundancy_issues)
     risk_score = max(0.0, risk_score - conflict_deduction)
@@ -554,6 +561,7 @@ def calculate_health_score(
         "position_count": n,
         "issues": issues,
         "notes": notes,
+        "opportunities": opportunities,
         "sector_breakdown": sector_breakdown,
         "investment_style": investment_style,
         "market_trends_period": trend_period_label,
