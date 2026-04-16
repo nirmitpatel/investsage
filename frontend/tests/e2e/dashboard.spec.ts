@@ -115,7 +115,7 @@ test.describe('Dashboard', () => {
     await page.goto('/dashboard')
 
     // Click Ask AI for AAPL — badge should appear
-    await page.getByRole('button', { name: /ask ai/i }).first().click()
+    await page.getByRole('button', { name: /ask sage/i }).first().click()
     const badge = page.getByRole('button', { name: /hold/i }).first()
     await expect(badge).toBeVisible()
 
@@ -134,9 +134,9 @@ test.describe('Dashboard', () => {
 
     // Trigger both recommendations so both badges render (click sequentially — each click
     // replaces the "Ask AI" button with a badge, so re-query first() each time)
-    await page.getByRole('button', { name: /ask ai/i }).first().click()
+    await page.getByRole('button', { name: /ask sage/i }).first().click()
     await expect(page.getByRole('button', { name: /hold/i }).first()).toBeVisible()
-    await page.getByRole('button', { name: /ask ai/i }).first().click()
+    await page.getByRole('button', { name: /ask sage/i }).first().click()
     // Wait for both badges
     await expect(page.getByRole('button', { name: /hold/i }).first()).toBeVisible()
 
@@ -166,7 +166,7 @@ test.describe('Dashboard', () => {
     })
     await page.goto('/dashboard')
 
-    await page.getByRole('button', { name: /ask ai/i }).first().click()
+    await page.getByRole('button', { name: /ask sage/i }).first().click()
     const badge = page.getByRole('button', { name: /hold/i }).first()
     await expect(badge).toBeVisible()
 
