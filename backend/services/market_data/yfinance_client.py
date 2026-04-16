@@ -77,6 +77,48 @@ def fetch_prices_with_prev_close(symbols: List[str]) -> Dict[str, Dict[str, Opti
     return all_data
 
 
+def fetch_price_performance(symbol: str) -> Dict[str, Optional[float]]:
+    """
+    Fetch 30-day and 90-day price % change for `symbol` and SPY for comparison.
+    Returns {pct_30d, pct_90d, spy_30d, spy_90d}; values may be None on failure.
+    Uses ~21 trading days for 30d and full 3-month period for 90d.
+    """
+    result: Dict[str, Optional[float]] = {
+        "pct_30d": None, "pct_90d": None,
+        "spy_30d": None, "spy_90d": None,
+    }
+    if symbol == "SPY":
+        return result
+
+    def _pct(series, n_back: int) -> Optional[float]:
+        """% change from n_back rows ago to today. n_back=0 means full period (first row)."""
+        try:
+            s = series.dropna()
+            start = s.iloc[0] if n_back == 0 else (s.iloc[-n_back] if len(s) > n_back else None)
+            if start is None:
+                return None
+            return round((float(s.iloc[-1]) - float(start)) / float(start) * 100, 2)
+        except Exception:
+            return None
+
+    try:
+        data = yf.download([symbol, "SPY"], period="3mo", auto_adjust=True, progress=False, threads=False)
+        if data.empty:
+            return result
+        close = data["Close"] if "Close" in data.columns else data
+        if symbol in close.columns:
+            sym_s = close[symbol]
+            result["pct_30d"] = _pct(sym_s, 21)
+            result["pct_90d"] = _pct(sym_s, 0)
+        if "SPY" in close.columns:
+            spy_s = close["SPY"]
+            result["spy_30d"] = _pct(spy_s, 21)
+            result["spy_90d"] = _pct(spy_s, 0)
+    except Exception as e:
+        log.debug("Price performance fetch failed for %s: %s", symbol, e)
+    return result
+
+
 FUND_SECTOR_NAME_MAP = {
     "technology": "Technology",
     "healthcare": "Healthcare",

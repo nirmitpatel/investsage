@@ -237,14 +237,98 @@ def _format_signals_section(fmp: dict, current_price: float | None) -> str:
 
 
 def _format_purchase_pattern_section(pattern_data: dict) -> str:
-    """Format purchase pattern as a prompt section."""
+    """Format purchase pattern as a prompt line."""
     description = pattern_data.get("description")
     if not description:
         return ""
     count = pattern_data.get("purchase_count", 0)
     if count < 2:
         return ""
-    return f"\nPurchase pattern:\n- {description}"
+    return f"- Purchase pattern: {description}"
+
+
+def _format_performance_factor(
+    gain_pct: float,
+    gain_abs: float,
+    price_perf: dict,
+    sector_trend,
+    trend_period: str,
+) -> str:
+    lines = [f"- All-time personal return: {gain_pct:+.1f}% (${gain_abs:+,.2f} unrealized)"]
+    pct_30d = price_perf.get("pct_30d")
+    pct_90d = price_perf.get("pct_90d")
+    spy_30d = price_perf.get("spy_30d")
+    spy_90d = price_perf.get("spy_90d")
+    if pct_30d is not None:
+        spy_str = (
+            f" | S&P 500: {spy_30d:+.1f}% ({pct_30d - spy_30d:+.1f}pp vs market)"
+            if spy_30d is not None else ""
+        )
+        lines.append(f"- 30-day return: {pct_30d:+.1f}%{spy_str}")
+    if pct_90d is not None:
+        spy_str = (
+            f" | S&P 500: {spy_90d:+.1f}% ({pct_90d - spy_90d:+.1f}pp vs market)"
+            if spy_90d is not None else ""
+        )
+        lines.append(f"- 90-day return: {pct_90d:+.1f}%{spy_str}")
+    if sector_trend is not None:
+        lines.append(f"- Sector {trend_period} trend: {sector_trend:+.1f}% (sector benchmark)")
+    else:
+        lines.append(f"- Sector {trend_period} trend: unavailable")
+    return "\n".join(lines)
+
+
+def _format_portfolio_fit_factor(
+    pos_weight: float,
+    avg_weight: float,
+    portfolio_fit: dict,
+    style: str,
+    style_guidance: str,
+) -> str:
+    weight_label = "underweight" if pos_weight < avg_weight else "overweight"
+    lines = [
+        f"- Position weight: {pos_weight:.1f}% ({weight_label} vs {avg_weight:.1f}% equal-weight average)",
+    ]
+    conflicts = portfolio_fit.get("conflicts", [])
+    redundancies = portfolio_fit.get("redundancies", [])
+    if conflicts:
+        lines.append(f"- Competing positions: {'; '.join(conflicts)}")
+    else:
+        lines.append("- Competing positions: None")
+    if redundancies:
+        lines.append(f"- Functional overlap: {'; '.join(redundancies)}")
+    else:
+        lines.append("- Functional overlap: None")
+    lines.append(f"- Investment style: {style}")
+    if style_guidance:
+        lines.append(f"- Style note: {style_guidance}")
+    return "\n".join(lines)
+
+
+def _format_tax_timing_factor(tax_timing: dict, gain_abs: float, pattern_section: str) -> str:
+    short = tax_timing.get("short_term_lots", 0)
+    long_ = tax_timing.get("long_term_lots", 0)
+    days_to_lt = tax_timing.get("days_to_long_term")
+    lines = []
+    if short == 0 and long_ == 0:
+        lines.append("- Holding period: No tax lot data")
+    else:
+        parts = []
+        if long_ > 0:
+            parts.append(f"{long_} long-term lot{'s' if long_ > 1 else ''}")
+        if short > 0:
+            parts.append(f"{short} short-term lot{'s' if short > 1 else ''}")
+        lines.append(f"- Holding period: {', '.join(parts)}")
+        if days_to_lt is not None and days_to_lt > 0:
+            lines.append(f"- Earliest short-term lot becomes long-term in {days_to_lt} days")
+    if gain_abs > 0:
+        tax_note = "short-term capital gains" if short > 0 else "long-term capital gains"
+        lines.append(f"- Tax status: ${gain_abs:,.0f} unrealized gain — selling triggers {tax_note}")
+    elif gain_abs < 0:
+        lines.append(f"- Tax status: ${abs(gain_abs):,.0f} harvestable loss — selling generates a tax benefit")
+    if pattern_section:
+        lines.append(pattern_section)
+    return "\n".join(lines)
 
 
 def generate_sell_hold_buy(position: dict, portfolio_context: dict) -> dict:
@@ -260,74 +344,88 @@ def generate_sell_hold_buy(position: dict, portfolio_context: dict) -> dict:
     company_name = position.get('description') or position['symbol']
     fmp = portfolio_context.get('fmp') or {}
     purchase_pattern = portfolio_context.get('purchase_pattern') or {}
+    price_performance = portfolio_context.get('price_performance') or {}
+    portfolio_fit = portfolio_context.get('portfolio_fit') or {}
+    tax_timing = portfolio_context.get('tax_timing') or {}
 
-    sector_line = (
-        f"Sector {trend_period} trend: {sector_trend:+.1f}% (current market environment for {sector} sector)"
-        if sector_trend is not None
-        else f"Sector {trend_period} trend: data unavailable"
-    )
-    weight_line = (
-        f"Position weight: {pos_weight:.1f}% of portfolio "
-        f"({'underweight' if pos_weight < avg_weight else 'overweight'} vs {avg_weight:.1f}% equal-weight average)"
-    )
     current_price = position.get("current_price") or position.get("last_price")
-    signals_section = _format_signals_section(fmp, current_price)
+    thesis_section = _format_signals_section(fmp, current_price)
     pattern_section = _format_purchase_pattern_section(purchase_pattern)
 
     is_failed_averaging_down = purchase_pattern.get("pattern") == "failed_averaging_down"
 
     style_guidance = {
-        "long_game": "This investor has a 10+ year horizon. Quality companies with durable competitive advantages should be held through volatility — only recommend SELL if the company's long-term thesis is fundamentally broken.",
-        "beat_the_market": "This investor wants to outperform the S&P 500. Favor positions in companies with strong growth momentum and sector tailwinds. Consider trimming laggards and adding to leaders.",
-        "play_it_safe": "This investor prioritizes capital preservation. Flag meaningful downside risk, over-concentration, or speculative positions. Dividend stability and defensive characteristics matter.",
+        "long_game": "10+ year horizon — only sell if the long-term thesis is fundamentally broken; hold through volatility",
+        "beat_the_market": "outperform the S&P 500 — trim laggards, add to leaders with strong momentum",
+        "play_it_safe": "capital preservation — flag downside risk, over-concentration, or speculative exposure",
     }.get(style, "")
 
-    has_live_data = bool(signals_section)
+    factor1 = _format_performance_factor(gain_pct, gain_abs, price_performance, sector_trend, trend_period)
+    factor3 = _format_portfolio_fit_factor(pos_weight, avg_weight, portfolio_fit, style, style_guidance)
+    factor4 = _format_tax_timing_factor(tax_timing, gain_abs, pattern_section)
 
-    prompt = f"""You are a professional financial analyst. Give a considered Sell, Hold, or Buy More recommendation for this position.
+    thesis_block = (
+        thesis_section.strip()
+        if thesis_section
+        else "- No live data — rely on your knowledge of this company's moat, growth, and competitive position"
+    )
+
+    failed_avg_note = (
+        "\n⚠️  FAILED AVERAGING DOWN: Investor has repeatedly bought at lower prices and is below all cost bases. "
+        "This is a critical signal — weight strongly toward SELL unless there is a compelling fundamental reason to hold."
+        if is_failed_averaging_down else ""
+    )
+
+    prompt = f"""You are a professional financial analyst. Evaluate whether to SELL, HOLD, or BUY MORE this position by weighing four factors equally (25% each).
 
 Company: {company_name} ({position['symbol']})
 Sector: {sector}
+Current value: ${position.get('current_value', 0):,.2f}
 
-Position details:
-- All-time personal return: {gain_pct:+.1f}% (${gain_abs:+,.2f} unrealized)
-- Current value: ${position.get('current_value', 0):,.2f}
-- {weight_line}
-- {sector_line}
-{signals_section}{pattern_section}
-Portfolio context:
-- Investment style: {style}
-- Total portfolio: ${portfolio_context.get('total_value', 0):,.2f} across {n} positions
-{f"- Style guidance: {style_guidance}" if style_guidance else ""}
+━━ FACTOR 1: PERFORMANCE TRAJECTORY ━━
+{factor1}
 
-IMPORTANT:
-1. Personal return % is from the investor's purchase date — do NOT compare it to the sector trend period. Different timeframes, not comparable.
-2. Sector trend shows current market environment (tailwind or headwind) only.
-{"3. Live market signals above are current data — weight them heavily in your decision." if has_live_data else "3. No live data available — rely on your knowledge of this company's competitive moat, growth trajectory, and market position."}
-4. Being profitable (positive return) is NOT a reason to sell.
-{"5. FAILED AVERAGING DOWN detected — the investor has repeatedly bought at lower prices and is now below all purchase prices. This is a critical signal that the investment thesis may be broken. Weight strongly toward SELL unless there is a compelling fundamental reason to hold." if is_failed_averaging_down else ""}
+━━ FACTOR 2: THESIS VALIDITY ━━
+{thesis_block}
 
-Decision criteria:
-- BUY_MORE: Strong fundamentals or analyst consensus + favorable sector + position underweight
-- HOLD: Solid company, neutral-to-positive analyst view, no clear reason to exit
-- SELL: Analysts skewing negative, thesis broken, or severely overweight in deteriorating sector
+━━ FACTOR 3: PORTFOLIO FIT ━━
+{factor3}
+
+━━ FACTOR 4: TAX & TIMING ━━
+{factor4}
+{failed_avg_note}
+
+Rules:
+- All-time personal return is from the investor's purchase date — do NOT compare to the sector trend period (different timeframes).
+- Being profitable is NOT a reason to sell.
+- Short-term lots close to long-term threshold: consider waiting unless there is a strong sell signal.
+
+Decision thresholds:
+- BUY_MORE: Momentum strong (factor 1) + thesis intact (factor 2) + position underweight or well-sized (factor 3) + tax-efficient (factor 4)
+- HOLD: Thesis solid but no strong buy signal, or tax timing argues for patience, or mixed factors
+- SELL: Thesis broken or analysts strongly negative (factor 2) AND poor momentum or overweight
 
 Respond in this exact JSON format:
 {{
   "recommendation": "SELL" | "HOLD" | "BUY_MORE",
   "confidence": "HIGH" | "MEDIUM" | "LOW",
-  "reasoning": "2-3 sentences citing specific signals (analyst count, earnings result, price target upside, purchase pattern) where available",
-  "key_factors": ["factor 1", "factor 2", "factor 3"]
+  "reasoning": "2-3 sentences citing specific data from the four factors",
+  "key_factors": ["factor 1", "factor 2", "factor 3"],
+  "factor_scores": {{
+    "performance_trajectory": <0-100>,
+    "thesis_validity": <0-100>,
+    "portfolio_fit": <0-100>,
+    "tax_timing": <0-100>
+  }}
 }}"""
 
     message = client.messages.create(
         model=ANALYSIS_MODEL,
-        max_tokens=500,
+        max_tokens=600,
         messages=[{"role": "user", "content": prompt}],
     )
 
     raw = message.content[0].text.strip()
-    # Strip markdown code fences if present
     if raw.startswith("```"):
         raw = raw.split("```")[1]
         if raw.startswith("json"):
@@ -337,7 +435,6 @@ Respond in this exact JSON format:
     try:
         return json.loads(raw)
     except json.JSONDecodeError:
-        # Try to salvage a recommendation keyword from the raw text
         upper = raw.upper()
         if "SELL" in upper:
             rec = "SELL"
@@ -350,4 +447,5 @@ Respond in this exact JSON format:
             "confidence": "LOW",
             "reasoning": raw,
             "key_factors": [],
+            "factor_scores": {},
         }

@@ -15,6 +15,7 @@ VALID_POSITION = {
     "symbol": "VRTX",
     "sector": "Healthcare",
     "total_gain_loss_percent": 8.2,
+    "total_gain_loss": 1234.56,
     "current_value": 5000.0,
     "percent_of_account": 1.6,
 }
@@ -25,6 +26,9 @@ BASE_CONTEXT = {
     "investment_style": "beat_the_market",
     "sector_trend": 5.0,
     "trend_period": "3-month",
+    "price_performance": {"pct_30d": 3.2, "pct_90d": 12.5, "spy_30d": 1.1, "spy_90d": 8.3},
+    "portfolio_fit": {"conflicts": [], "redundancies": []},
+    "tax_timing": {"short_term_lots": 1, "long_term_lots": 1, "days_to_long_term": 45},
 }
 
 
@@ -43,13 +47,28 @@ class TestOutputSchema:
         "confidence": "MEDIUM",
         "reasoning": "Position is balanced.",
         "key_factors": ["factor A", "factor B"],
+        "factor_scores": {
+            "performance_trajectory": 65,
+            "thesis_validity": 70,
+            "portfolio_fit": 55,
+            "tax_timing": 60,
+        },
     }
 
     def test_returns_all_required_keys(self):
         with patch("services.ai.claude_client.client.messages.create",
                    return_value=_mock_claude(self.VALID_RESPONSE)):
             result = generate_sell_hold_buy(VALID_POSITION, BASE_CONTEXT)
-        assert set(result.keys()) >= {"recommendation", "confidence", "reasoning", "key_factors"}
+        assert set(result.keys()) >= {"recommendation", "confidence", "reasoning", "key_factors", "factor_scores"}
+
+    def test_factor_scores_has_all_four_factors(self):
+        with patch("services.ai.claude_client.client.messages.create",
+                   return_value=_mock_claude(self.VALID_RESPONSE)):
+            result = generate_sell_hold_buy(VALID_POSITION, BASE_CONTEXT)
+        fs = result.get("factor_scores", {})
+        assert set(fs.keys()) >= {
+            "performance_trajectory", "thesis_validity", "portfolio_fit", "tax_timing"
+        }
 
     @pytest.mark.parametrize("rec", ["SELL", "HOLD", "BUY_MORE"])
     def test_accepts_all_valid_recommendations(self, rec):
@@ -206,3 +225,30 @@ class TestPromptContent:
     def test_sector_appears_in_prompt(self):
         prompt = self._capture_prompt(VALID_POSITION, BASE_CONTEXT)
         assert "Healthcare" in prompt
+
+    def test_30d_return_in_prompt_when_available(self):
+        ctx = {**BASE_CONTEXT, "price_performance": {"pct_30d": 3.2, "pct_90d": 12.5, "spy_30d": 1.1, "spy_90d": 8.3}}
+        prompt = self._capture_prompt(VALID_POSITION, ctx)
+        assert "30-day" in prompt and "3.2%" in prompt
+
+    def test_spy_comparison_in_prompt(self):
+        ctx = {**BASE_CONTEXT, "price_performance": {"pct_30d": 3.2, "pct_90d": 12.5, "spy_30d": 1.1, "spy_90d": 8.3}}
+        prompt = self._capture_prompt(VALID_POSITION, ctx)
+        assert "S&P 500" in prompt
+
+    def test_conflicts_in_prompt_when_present(self):
+        ctx = {**BASE_CONTEXT, "portfolio_fit": {"conflicts": ["Social Media (alongside META)"], "redundancies": []}}
+        prompt = self._capture_prompt(VALID_POSITION, ctx)
+        assert "Social Media" in prompt
+
+    def test_tax_timing_short_term_in_prompt(self):
+        ctx = {**BASE_CONTEXT, "tax_timing": {"short_term_lots": 2, "long_term_lots": 0, "days_to_long_term": 30}}
+        prompt = self._capture_prompt(VALID_POSITION, ctx)
+        assert "short-term" in prompt.lower()
+
+    def test_four_factor_headers_in_prompt(self):
+        prompt = self._capture_prompt(VALID_POSITION, BASE_CONTEXT)
+        assert "PERFORMANCE TRAJECTORY" in prompt
+        assert "THESIS VALIDITY" in prompt
+        assert "PORTFOLIO FIT" in prompt
+        assert "TAX & TIMING" in prompt

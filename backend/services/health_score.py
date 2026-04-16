@@ -156,6 +156,38 @@ def detect_redundancies(
     return issues, min(deduction, 8.0)
 
 
+def check_symbol_portfolio_fit(
+    symbol: str,
+    positions: List[Dict[str, Any]],
+) -> Dict[str, Any]:
+    """
+    Check for conflicts and redundancies involving `symbol` within the held portfolio.
+    Returns {"conflicts": [str], "redundancies": [str]}
+    """
+    held = {
+        p["symbol"] for p in positions
+        if p.get("sector") not in ("ETF", "Mutual Fund") and p["symbol"] != symbol
+    }
+    conflicts = []
+    redundancies = []
+
+    for space_name, space_symbols in COMPETITIVE_PAIRS.items():
+        if symbol not in space_symbols:
+            continue
+        others = [s for s in space_symbols if s in held]
+        if others:
+            conflicts.append(f"{space_name} (alongside {', '.join(others)})")
+
+    for category_name, (_, category_symbols) in FUNCTIONAL_OVERLAPS.items():
+        if symbol not in category_symbols:
+            continue
+        others = [s for s in category_symbols if s in held]
+        if others:
+            redundancies.append(f"{category_name} (alongside {', '.join(others)})")
+
+    return {"conflicts": conflicts, "redundancies": redundancies}
+
+
 def build_effective_sector_values(
     positions: List[Dict[str, Any]],
     fund_weightings: Optional[Dict[str, Dict[str, float]]] = None,

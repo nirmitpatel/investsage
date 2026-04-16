@@ -3,12 +3,14 @@ AI analysis endpoints.
 """
 
 import asyncio
+from concurrent.futures import ThreadPoolExecutor
+from datetime import date
 from fastapi import APIRouter, HTTPException, Depends
 
 from services.db.supabase_client import get_or_create_portfolio, get_positions, get_tax_lots
 from services.purchase_pattern import analyze_purchase_pattern
-from services.market_data.yfinance_client import fetch_prices
-from services.health_score import calculate_health_score, build_effective_sector_values
+from services.market_data.yfinance_client import fetch_prices, fetch_price_performance
+from services.health_score import calculate_health_score, build_effective_sector_values, check_symbol_portfolio_fit
 from services.market_data.yfinance_client import fetch_fund_sector_weightings, fetch_sector_etf_performance, SECTOR_NAME_NORMALIZE
 from services.tax_savings import find_tax_opportunities, summarize_tax_opportunities
 from services.ai.claude_client import analyze_portfolio, generate_sell_hold_buy, generate_rebalance_suggestion
@@ -56,6 +58,33 @@ async def analyze(user_id: str = Depends(get_current_user)):
     return result
 
 
+def _compute_tax_timing(symbol_lots: list) -> dict:
+    """Derive tax timing signals from tax lots for a single symbol."""
+    today = date.today()
+    result = {"short_term_lots": 0, "long_term_lots": 0, "days_to_long_term": None}
+    if not symbol_lots:
+        return result
+    min_days_to_lt = None
+    for lot in symbol_lots:
+        term = lot.get("term")
+        if term == "long":
+            result["long_term_lots"] += 1
+        elif term == "short":
+            result["short_term_lots"] += 1
+            acq = lot.get("acquisition_date")
+            if acq:
+                try:
+                    acq_date = date.fromisoformat(str(acq)[:10])
+                    days_to_lt = max(0, 365 - (today - acq_date).days)
+                    if min_days_to_lt is None or days_to_lt < min_days_to_lt:
+                        min_days_to_lt = days_to_lt
+                except (ValueError, TypeError):
+                    pass
+    if min_days_to_lt is not None:
+        result["days_to_long_term"] = min_days_to_lt
+    return result
+
+
 def _recommend_sync(symbol: str, portfolio: dict, positions: list) -> dict:
     position = next((p for p in positions if p["symbol"] == symbol), None)
     if not position:
@@ -65,7 +94,6 @@ def _recommend_sync(symbol: str, portfolio: dict, positions: list) -> dict:
     investment_style = portfolio.get("investment_style")
     period = STYLE_TREND_PERIOD.get(investment_style, "3mo")
 
-    # Fetch sector trend for this position's sector
     raw_sector = position.get("sector") or "Unknown"
     sector = SECTOR_NAME_NORMALIZE.get(raw_sector, raw_sector)
     sector_trend = None
@@ -79,13 +107,19 @@ def _recommend_sync(symbol: str, portfolio: dict, positions: list) -> dict:
 
     account_type = position.get("account_type", "individual")
 
-    # Fetch FMP fundamentals for non-retirement individual stock positions
-    fmp_data = {}
+    # Fetch FMP fundamentals + 30d/90d price performance in parallel (non-retirement stocks)
+    fmp_data: dict = {}
+    price_performance: dict = {}
     if account_type not in RETIREMENT_ACCOUNT_TYPES and raw_sector not in ("ETF", "Mutual Fund"):
-        fmp_data = fetch_analyst_fundamentals(symbol)
+        with ThreadPoolExecutor(max_workers=2) as ex:
+            fmp_future = ex.submit(fetch_analyst_fundamentals, symbol)
+            perf_future = ex.submit(fetch_price_performance, symbol)
+            fmp_data = fmp_future.result()
+            price_performance = perf_future.result()
 
-    # Analyze purchase pattern from tax lots
+    # Purchase pattern + tax timing from tax lots
     purchase_pattern: dict = {}
+    tax_timing: dict = {}
     if account_type not in RETIREMENT_ACCOUNT_TYPES:
         user_id = portfolio.get("user_id")
         if user_id:
@@ -93,6 +127,10 @@ def _recommend_sync(symbol: str, portfolio: dict, positions: list) -> dict:
             symbol_lots = [l for l in all_lots if l.get("symbol") == symbol]
             current_price = position.get("current_price")
             purchase_pattern = analyze_purchase_pattern(symbol_lots, current_price)
+            tax_timing = _compute_tax_timing(symbol_lots)
+
+    # Portfolio fit: conflicts and redundancies for this symbol
+    portfolio_fit = check_symbol_portfolio_fit(symbol, positions)
 
     portfolio_context = {
         "total_value": total_value,
@@ -103,6 +141,9 @@ def _recommend_sync(symbol: str, portfolio: dict, positions: list) -> dict:
         "account_type": account_type,
         "fmp": fmp_data,
         "purchase_pattern": purchase_pattern,
+        "price_performance": price_performance,
+        "portfolio_fit": portfolio_fit,
+        "tax_timing": tax_timing,
     }
 
     if account_type in RETIREMENT_ACCOUNT_TYPES:
