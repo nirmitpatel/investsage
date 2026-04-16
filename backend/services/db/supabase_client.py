@@ -6,7 +6,7 @@ Uses the service key (bypasses RLS) since auth is verified at the API layer.
 from supabase import create_client, Client
 from config import settings
 from datetime import datetime
-from typing import List, Dict, Any
+from typing import List, Dict, Any, Optional
 
 _client: Client | None = None
 
@@ -35,6 +35,20 @@ def update_portfolio_style(portfolio_id: str, investment_style: str) -> None:
     get_supabase().table("portfolios").update(
         {"investment_style": investment_style}
     ).eq("id", portfolio_id).execute()
+
+
+def update_portfolio_tax_bracket(
+    portfolio_id: str,
+    federal_tax_bracket: Optional[float],
+    state_tax_bracket: Optional[float],
+) -> None:
+    update: Dict[str, Any] = {}
+    if federal_tax_bracket is not None:
+        update["federal_tax_bracket"] = federal_tax_bracket
+    if state_tax_bracket is not None:
+        update["state_tax_bracket"] = state_tax_bracket
+    if update:
+        get_supabase().table("portfolios").update(update).eq("id", portfolio_id).execute()
 
 
 def upsert_positions(portfolio_id: str, user_id: str, positions: List[Dict[str, Any]]) -> List[Dict[str, Any]]:

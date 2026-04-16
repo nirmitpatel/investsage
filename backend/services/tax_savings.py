@@ -9,11 +9,20 @@ For each open tax lot at a loss:
 """
 
 from datetime import date, timedelta
-from typing import List, Dict, Any, Optional
+from typing import List, Dict, Any, Optional, Tuple
 
-# Federal tax rates used for estimate (marginal)
-SHORT_TERM_RATE = 0.37    # short-term capital gains = ordinary income (top bracket)
-LONG_TERM_RATE = 0.20     # long-term capital gains (top bracket)
+# Default federal tax rates — top bracket (used when user has no bracket set)
+DEFAULT_SHORT_TERM_RATE = 0.37   # short-term = ordinary income (37% top bracket)
+DEFAULT_LONG_TERM_RATE = 0.20    # long-term (20% for 37% bracket)
+
+# Long-term rate by federal bracket (IRS 2024 capital gains brackets)
+LTCG_RATE_BY_BRACKET: Dict[float, float] = {
+    0.22: 0.15,
+    0.24: 0.15,
+    0.32: 0.15,
+    0.35: 0.15,
+    0.37: 0.20,
+}
 
 DAYS_IN_YEAR = 365
 
@@ -37,10 +46,23 @@ SECTOR_REPLACEMENTS: Dict[str, str] = {
 DEFAULT_REPLACEMENT = "VTI (Vanguard Total Stock Market ETF)"
 
 
+def effective_rates(
+    federal_bracket: Optional[float] = None,
+    state_bracket: Optional[float] = None,
+) -> Tuple[float, float]:
+    """Return (short_term_rate, long_term_rate) given user's tax brackets."""
+    st = federal_bracket if federal_bracket is not None else DEFAULT_SHORT_TERM_RATE
+    lt = LTCG_RATE_BY_BRACKET.get(st, DEFAULT_LONG_TERM_RATE)
+    state = state_bracket or 0.0
+    return st + state, lt + state
+
+
 def find_tax_opportunities(
     lots: List[Dict[str, Any]],
     current_prices: Dict[str, float],
     sectors: Optional[Dict[str, str]] = None,
+    federal_bracket: Optional[float] = None,
+    state_bracket: Optional[float] = None,
 ) -> List[Dict[str, Any]]:
     """
     Given open tax lots and current prices, find tax-loss harvesting opportunities.
@@ -49,6 +71,7 @@ def find_tax_opportunities(
     today = date.today()
     sectors = sectors or {}
     opportunities = []
+    short_term_rate, long_term_rate = effective_rates(federal_bracket, state_bracket)
 
     for lot in lots:
         symbol = lot.get("symbol", "")
@@ -82,8 +105,8 @@ def find_tax_opportunities(
         is_short_term = (days_held is not None and days_held < DAYS_IN_YEAR)
         days_until_lt = (DAYS_IN_YEAR - days_held) if is_short_term and days_held is not None else None
 
-        # Tax savings estimate
-        rate = SHORT_TERM_RATE if is_short_term else LONG_TERM_RATE
+        # Tax savings estimate using user bracket (or top-bracket default)
+        rate = short_term_rate if is_short_term else long_term_rate
         tax_savings = unrealized_loss * rate
 
         sector = sectors.get(symbol, "Unknown")

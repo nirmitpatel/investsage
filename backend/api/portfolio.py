@@ -19,6 +19,7 @@ from services.db.supabase_client import (
     get_positions,
     replace_tax_lots,
     update_portfolio_style,
+    update_portfolio_tax_bracket,
     patch_positions_cost_basis,
     upsert_snapshot,
 )
@@ -95,6 +96,36 @@ async def update_investment_style(
 
 MAX_CSV_BYTES = 5 * 1024 * 1024   # 5 MB
 MAX_PDF_BYTES = 10 * 1024 * 1024  # 10 MB
+
+
+VALID_FEDERAL_BRACKETS = {0.22, 0.24, 0.32, 0.35, 0.37}
+
+
+class TaxBracketUpdate(BaseModel):
+    federal_tax_bracket: Optional[float] = None
+    state_tax_bracket: Optional[float] = None
+
+
+@router.patch("/tax-bracket")
+async def update_tax_bracket(
+    body: TaxBracketUpdate,
+    user_id: str = Depends(get_current_user),
+):
+    if body.federal_tax_bracket is not None and body.federal_tax_bracket not in VALID_FEDERAL_BRACKETS:
+        raise HTTPException(
+            status_code=400,
+            detail=f"federal_tax_bracket must be one of {sorted(VALID_FEDERAL_BRACKETS)}",
+        )
+    if body.state_tax_bracket is not None and not (0 <= body.state_tax_bracket <= 0.20):
+        raise HTTPException(status_code=400, detail="state_tax_bracket must be between 0 and 0.20")
+    portfolio = get_or_create_portfolio(user_id)
+    update_portfolio_tax_bracket(portfolio["id"], body.federal_tax_bracket, body.state_tax_bracket)
+    # Return updated portfolio fields
+    portfolio = get_or_create_portfolio(user_id)
+    return {
+        "federal_tax_bracket": portfolio.get("federal_tax_bracket"),
+        "state_tax_bracket": portfolio.get("state_tax_bracket"),
+    }
 
 
 @router.post("/import/positions")

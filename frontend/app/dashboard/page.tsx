@@ -25,6 +25,13 @@ interface HealthIssue {
   message: string
 }
 
+interface SubScore {
+  score: number
+  grade: string
+  label: string
+  max: number
+}
+
 interface Health {
   score: number
   grade: string
@@ -36,6 +43,12 @@ interface Health {
   sector_breakdown: SectorBreakdownItem[]
   investment_style: InvestmentStyle
   market_trends_period: string
+  sub_scores?: {
+    sizing: SubScore
+    diversification: SubScore
+    risk: SubScore
+    performance: SubScore
+  }
 }
 
 const STYLE_CONFIG = {
@@ -708,6 +721,32 @@ export default function Dashboard() {
               ) : <p className="text-3xl font-bold text-gray-700">—</p>}
             </div>
           </div>
+
+          {/* Health Score Sub-grades */}
+          {health?.sub_scores && (
+            <div className="bg-white/[0.03] border border-white/[0.08] rounded-2xl p-6">
+              <h2 className="font-semibold mb-4 text-sm text-gray-400 uppercase tracking-wider">Health Score Breakdown</h2>
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+                {Object.values(health.sub_scores).map((sub) => {
+                  const pct = (sub.score / sub.max) * 100
+                  const barColor = pct >= 90 ? 'bg-emerald-500' : pct >= 75 ? 'bg-blue-500' : pct >= 60 ? 'bg-yellow-500' : 'bg-red-500'
+                  const gradeColor2 = sub.grade === 'A' ? 'text-emerald-400' : sub.grade === 'B' ? 'text-blue-400' : sub.grade === 'C' ? 'text-yellow-400' : sub.grade === 'N/A' ? 'text-gray-500' : 'text-red-400'
+                  return (
+                    <div key={sub.label} className="bg-white/[0.03] border border-white/[0.06] rounded-xl p-4">
+                      <div className="flex items-center justify-between mb-3">
+                        <p className="text-xs text-gray-500">{sub.label}</p>
+                        <span className={`text-lg font-bold ${gradeColor2}`}>{sub.grade}</span>
+                      </div>
+                      <div className="w-full h-1.5 bg-white/[0.06] rounded-full overflow-hidden mb-2">
+                        <div className={`h-full rounded-full transition-all duration-700 ${barColor}`} style={{ width: `${pct}%` }} />
+                      </div>
+                      <p className="text-xs text-gray-600">{sub.score} / {sub.max}</p>
+                    </div>
+                  )
+                })}
+              </div>
+            </div>
+          )}
 
           {/* Sector Breakdown */}
           {health?.sector_breakdown && health.sector_breakdown.length > 0 && (

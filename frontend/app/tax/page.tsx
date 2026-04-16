@@ -53,6 +53,14 @@ function UrgencyBadge({ urgency }: { urgency: 'high' | 'medium' | null }) {
   )
 }
 
+const FEDERAL_BRACKETS = [
+  { value: 0.22, label: '22%' },
+  { value: 0.24, label: '24%' },
+  { value: 0.32, label: '32%' },
+  { value: 0.35, label: '35%' },
+  { value: 0.37, label: '37% (top)' },
+]
+
 export default function TaxPage() {
   const router = useRouter()
   const supabase = createClient()
@@ -64,6 +72,10 @@ export default function TaxPage() {
   const [opportunities, setOpportunities] = useState<TaxOpportunity[]>([])
   const [explanations, setExplanations] = useState<Record<string, string>>({})
   const [explaining, setExplaining] = useState<Record<string, boolean>>({})
+  const [federalBracket, setFederalBracket] = useState<number | null>(null)
+  const [stateBracket, setStateBracket] = useState<number | null>(null)
+  const [stateInput, setStateInput] = useState('')
+  const [savingBracket, setSavingBracket] = useState(false)
 
   useEffect(() => {
     load()
@@ -85,6 +97,11 @@ export default function TaxPage() {
         setHasLots(data.has_lots ?? false)
         setSummary(data.summary ?? null)
         setOpportunities(data.opportunities ?? [])
+        setFederalBracket(data.federal_tax_bracket ?? null)
+        setStateBracket(data.state_tax_bracket ?? null)
+        if (data.state_tax_bracket != null) {
+          setStateInput(String(Math.round(data.state_tax_bracket * 100)))
+        }
       } else {
         setLoadingError(true)
       }
@@ -92,6 +109,38 @@ export default function TaxPage() {
       setLoadingError(true)
     }
     setLoading(false)
+  }
+
+  async function handleBracketChange(federal: number | null, state: number | null) {
+    setSavingBracket(true)
+    const token = await getToken()
+    if (!token) return
+    const body: Record<string, number> = {}
+    if (federal != null) body.federal_tax_bracket = federal
+    if (state != null) body.state_tax_bracket = state
+    const res = await fetch(`${API}/api/v1/portfolio/tax-bracket`, {
+      method: 'PATCH',
+      headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+    })
+    setSavingBracket(false)
+    if (res.ok) {
+      // Reload opportunities with new rates
+      await load()
+    }
+  }
+
+  async function handleFederalSelect(val: number) {
+    setFederalBracket(val)
+    await handleBracketChange(val, stateBracket)
+  }
+
+  async function handleStateSubmit() {
+    const pct = parseFloat(stateInput)
+    if (isNaN(pct) || pct < 0 || pct > 20) return
+    const rate = pct / 100
+    setStateBracket(rate)
+    await handleBracketChange(federalBracket, rate)
   }
 
   async function handleExplain(symbol: string) {
@@ -127,6 +176,66 @@ export default function TaxPage() {
         </div>
 
         <div className="px-4 md:px-8 py-6 space-y-6">
+          {/* Tax bracket selector */}
+          <div className="bg-white/[0.03] border border-white/[0.08] rounded-2xl px-5 py-4">
+            <div className="flex flex-wrap items-center gap-4">
+              <div>
+                <p className="text-xs text-gray-500 mb-1.5">Federal tax bracket</p>
+                <div className="flex gap-1.5 flex-wrap">
+                  {FEDERAL_BRACKETS.map(b => (
+                    <button
+                      key={b.value}
+                      onClick={() => handleFederalSelect(b.value)}
+                      disabled={savingBracket}
+                      className={`px-3 py-1 rounded-full text-xs font-medium border transition disabled:opacity-50 ${
+                        federalBracket === b.value
+                          ? 'bg-violet-600 border-violet-500 text-white'
+                          : 'bg-white/[0.04] border-white/[0.08] text-gray-400 hover:text-white hover:border-white/20'
+                      }`}
+                    >
+                      {b.label}
+                    </button>
+                  ))}
+                </div>
+              </div>
+              <div>
+                <p className="text-xs text-gray-500 mb-1.5">State tax rate (optional)</p>
+                <div className="flex items-center gap-2">
+                  <input
+                    type="number"
+                    min="0"
+                    max="20"
+                    step="0.1"
+                    placeholder="e.g. 9.3"
+                    value={stateInput}
+                    onChange={e => setStateInput(e.target.value)}
+                    className="w-24 bg-white/[0.04] border border-white/[0.08] rounded-xl px-3 py-1 text-xs text-white placeholder-gray-600 focus:outline-none focus:border-violet-500/50"
+                  />
+                  <span className="text-xs text-gray-600">%</span>
+                  <button
+                    onClick={handleStateSubmit}
+                    disabled={savingBracket}
+                    className="text-xs text-violet-400 hover:text-violet-300 border border-violet-500/20 hover:border-violet-500/40 px-3 py-1 rounded-xl transition disabled:opacity-50"
+                  >
+                    Apply
+                  </button>
+                </div>
+              </div>
+              {savingBracket && (
+                <p className="text-xs text-gray-600 flex items-center gap-1.5">
+                  <svg className="animate-spin h-3 w-3" viewBox="0 0 24 24" fill="none">
+                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z" />
+                  </svg>
+                  Recalculating…
+                </p>
+              )}
+            </div>
+            {(federalBracket == null) && (
+              <p className="text-xs text-gray-600 mt-2">Using top federal rates (37%/20%) — set your bracket above for a personalized estimate.</p>
+            )}
+          </div>
+
           {loading ? (
             <div className="bg-white/[0.03] border border-white/[0.08] rounded-2xl p-16 text-center">
               <svg className="animate-spin h-6 w-6 text-violet-400 mx-auto mb-3" viewBox="0 0 24 24" fill="none">
@@ -168,7 +277,7 @@ export default function TaxPage() {
                   <SummaryCard
                     label="Est. Tax Savings"
                     value={`$${summary.total_tax_savings_estimate.toLocaleString('en-US', { minimumFractionDigits: 2 })}`}
-                    sub="At top federal rates"
+                    sub={federalBracket != null ? `At ${Math.round(federalBracket * 100)}% federal${stateBracket != null ? ` + ${Math.round(stateBracket * 100)}% state` : ''}` : 'At top federal rates (37%/20%)'}
                     color="text-emerald-400"
                   />
                   <SummaryCard
@@ -182,7 +291,7 @@ export default function TaxPage() {
 
               {/* Disclaimer */}
               <p className="text-xs text-gray-600 bg-white/[0.02] border border-white/[0.05] rounded-xl px-4 py-3">
-                <span className="text-gray-500 font-medium">Disclaimer:</span> Tax savings estimates use top federal marginal rates (37% short-term, 20% long-term) and are for educational purposes only. Consult a tax advisor before making decisions. Wash-sale rules apply — avoid buying substantially identical securities within 30 days.
+                <span className="text-gray-500 font-medium">Disclaimer:</span> Tax savings estimates use {federalBracket != null ? `your ${Math.round(federalBracket * 100)}% federal bracket` : 'top federal marginal rates (37% short-term, 20% long-term)'}{stateBracket != null ? ` + ${Math.round(stateBracket * 100)}% state` : ''}. For educational purposes only — consult a tax advisor before making decisions. Wash-sale rules apply — avoid buying substantially identical securities within 30 days.
               </p>
 
               {/* Opportunities */}

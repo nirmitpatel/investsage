@@ -6,12 +6,6 @@ _Say "execute next" to run the top unchecked item. Completed tasks are auto-stri
 
 ## P1 — High Value, Foundational Gaps
 
-- [ ] **Health score sub-grades** — design specifies 4 equal sub-scores (Position Sizing, Diversification, Risk Management, Performance) each at 25%; current score is a single composite; add sub-grade breakdown per the design's `calculate_sizing_score`, `calculate_diversification_score`, `calculate_risk_score`, `calculate_performance_score` algorithms
-- [ ] **Conflicting bet detection** — add `COMPETITIVE_PAIRS` database (GLP-1, Cybersecurity Identity, EV, Streaming, etc.) to health score; flag when user owns both winner and loser in same competitive space; surface as health issue with consolidation recommendation; `detect_conflicting_bets()` algorithm is fully specified in the design doc
-- [ ] **Redundancy detection** — add `FUNCTIONAL_OVERLAPS` database (Cybersecurity Platform, Cloud Data, etc.); flag when multiple positions serve the same portfolio function; `detect_redundancies()` algorithm fully specified
-- [ ] **User tax bracket** — tax savings are currently calculated at hardcoded 37%/20%; design requires user-specified bracket (22%, 24%, 32%, 35%); add `federal_tax_bracket` and `state_tax_bracket` to user profile; pass through to all tax calculations
-- [ ] **Transaction pattern analysis for recommendations** — analyze purchase history per symbol to detect: Failed Averaging Down (bought multiple times at decreasing prices, current price below all of them — high-severity alert), Adding to Winner (increasing prices — positive signal), High Conviction (multiple purchases — weight toward hold); `analyze_purchase_pattern()` algorithm fully specified in design
-
 ---
 
 ## P2 — Features

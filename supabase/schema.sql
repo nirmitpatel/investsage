@@ -34,6 +34,9 @@ CREATE TABLE positions (
 -- Migration (run if schema already applied):
 -- ALTER TABLE positions ADD COLUMN IF NOT EXISTS previous_close DECIMAL(15,4);
 -- ALTER TABLE positions ADD COLUMN IF NOT EXISTS account_type VARCHAR(20) DEFAULT 'individual';
+-- ALTER TABLE portfolios ADD COLUMN IF NOT EXISTS investment_style VARCHAR(30);
+-- ALTER TABLE portfolios ADD COLUMN IF NOT EXISTS federal_tax_bracket DECIMAL(4,2);
+-- ALTER TABLE portfolios ADD COLUMN IF NOT EXISTS state_tax_bracket DECIMAL(4,2);
 
 -- tax_lots: reconstructed from transaction history (FIFO)
 CREATE TABLE tax_lots (

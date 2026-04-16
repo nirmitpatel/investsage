@@ -236,6 +236,17 @@ def _format_signals_section(fmp: dict, current_price: float | None) -> str:
     return "\nLive market signals:\n" + "\n".join(f"- {l}" for l in lines)
 
 
+def _format_purchase_pattern_section(pattern_data: dict) -> str:
+    """Format purchase pattern as a prompt section."""
+    description = pattern_data.get("description")
+    if not description:
+        return ""
+    count = pattern_data.get("purchase_count", 0)
+    if count < 2:
+        return ""
+    return f"\nPurchase pattern:\n- {description}"
+
+
 def generate_sell_hold_buy(position: dict, portfolio_context: dict) -> dict:
     sector = position.get('sector', 'Unknown')
     gain_pct = position.get('total_gain_loss_percent', 0) or 0
@@ -248,6 +259,7 @@ def generate_sell_hold_buy(position: dict, portfolio_context: dict) -> dict:
     trend_period = portfolio_context.get('trend_period', '3-month')
     company_name = position.get('description') or position['symbol']
     fmp = portfolio_context.get('fmp') or {}
+    purchase_pattern = portfolio_context.get('purchase_pattern') or {}
 
     sector_line = (
         f"Sector {trend_period} trend: {sector_trend:+.1f}% (current market environment for {sector} sector)"
@@ -260,6 +272,9 @@ def generate_sell_hold_buy(position: dict, portfolio_context: dict) -> dict:
     )
     current_price = position.get("current_price") or position.get("last_price")
     signals_section = _format_signals_section(fmp, current_price)
+    pattern_section = _format_purchase_pattern_section(purchase_pattern)
+
+    is_failed_averaging_down = purchase_pattern.get("pattern") == "failed_averaging_down"
 
     style_guidance = {
         "long_game": "This investor has a 10+ year horizon. Quality companies with durable competitive advantages should be held through volatility — only recommend SELL if the company's long-term thesis is fundamentally broken.",
@@ -279,7 +294,7 @@ Position details:
 - Current value: ${position.get('current_value', 0):,.2f}
 - {weight_line}
 - {sector_line}
-{signals_section}
+{signals_section}{pattern_section}
 Portfolio context:
 - Investment style: {style}
 - Total portfolio: ${portfolio_context.get('total_value', 0):,.2f} across {n} positions
@@ -290,6 +305,7 @@ IMPORTANT:
 2. Sector trend shows current market environment (tailwind or headwind) only.
 {"3. Live market signals above are current data — weight them heavily in your decision." if has_live_data else "3. No live data available — rely on your knowledge of this company's competitive moat, growth trajectory, and market position."}
 4. Being profitable (positive return) is NOT a reason to sell.
+{"5. FAILED AVERAGING DOWN detected — the investor has repeatedly bought at lower prices and is now below all purchase prices. This is a critical signal that the investment thesis may be broken. Weight strongly toward SELL unless there is a compelling fundamental reason to hold." if is_failed_averaging_down else ""}
 
 Decision criteria:
 - BUY_MORE: Strong fundamentals or analyst consensus + favorable sector + position underweight
@@ -300,7 +316,7 @@ Respond in this exact JSON format:
 {{
   "recommendation": "SELL" | "HOLD" | "BUY_MORE",
   "confidence": "HIGH" | "MEDIUM" | "LOW",
-  "reasoning": "2-3 sentences citing specific signals (analyst count, earnings result, price target upside) where available",
+  "reasoning": "2-3 sentences citing specific signals (analyst count, earnings result, price target upside, purchase pattern) where available",
   "key_factors": ["factor 1", "factor 2", "factor 3"]
 }}"""
 

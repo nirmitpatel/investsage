@@ -6,6 +6,7 @@ import asyncio
 from fastapi import APIRouter, HTTPException, Depends
 
 from services.db.supabase_client import get_or_create_portfolio, get_positions, get_tax_lots
+from services.purchase_pattern import analyze_purchase_pattern
 from services.market_data.yfinance_client import fetch_prices
 from services.health_score import calculate_health_score, build_effective_sector_values
 from services.market_data.yfinance_client import fetch_fund_sector_weightings, fetch_sector_etf_performance, SECTOR_NAME_NORMALIZE
@@ -39,7 +40,9 @@ def _build_analysis_sync(user_id: str) -> dict:
         symbols = list({lot["symbol"] for lot in lots if lot.get("symbol")})
         prices = fetch_prices(symbols)
         sectors = {p["symbol"]: p.get("sector") for p in positions if p.get("sector")}
-        opps = find_tax_opportunities(lots, prices, sectors)
+        federal = portfolio.get("federal_tax_bracket")
+        state = portfolio.get("state_tax_bracket")
+        opps = find_tax_opportunities(lots, prices, sectors, federal, state)
         tax_summary = summarize_tax_opportunities(opps)
 
     summary = analyze_portfolio(positions, health, tax_summary or None)
@@ -81,6 +84,16 @@ def _recommend_sync(symbol: str, portfolio: dict, positions: list) -> dict:
     if account_type not in RETIREMENT_ACCOUNT_TYPES and raw_sector not in ("ETF", "Mutual Fund"):
         fmp_data = fetch_analyst_fundamentals(symbol)
 
+    # Analyze purchase pattern from tax lots
+    purchase_pattern: dict = {}
+    if account_type not in RETIREMENT_ACCOUNT_TYPES:
+        user_id = portfolio.get("user_id")
+        if user_id:
+            all_lots = get_tax_lots(user_id)
+            symbol_lots = [l for l in all_lots if l.get("symbol") == symbol]
+            current_price = position.get("current_price")
+            purchase_pattern = analyze_purchase_pattern(symbol_lots, current_price)
+
     portfolio_context = {
         "total_value": total_value,
         "position_count": len(positions),
@@ -89,6 +102,7 @@ def _recommend_sync(symbol: str, portfolio: dict, positions: list) -> dict:
         "trend_period": trend_period_label,
         "account_type": account_type,
         "fmp": fmp_data,
+        "purchase_pattern": purchase_pattern,
     }
 
     if account_type in RETIREMENT_ACCOUNT_TYPES:
