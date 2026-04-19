@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { Fragment, useState, useEffect } from 'react'
 
 export interface Position {
   symbol: string
@@ -135,7 +135,116 @@ function RecBadge({ rec }: { rec: any }) {
   )
 }
 
-// ── Side Drawer ──────────────────────────────────────────────────────────────
+// ── Shared analysis content (used by both drawer and inline expand) ───────────
+
+function AnalysisContent({
+  symbol, recommendation, loading, error, snapshotId, recAction,
+  onAction, onGetRecommendation, isRetirement,
+}: {
+  symbol: string
+  recommendation: any
+  loading: boolean
+  error?: string
+  snapshotId?: string
+  recAction?: string
+  onAction: (snapshotId: string, action: 'followed' | 'ignored') => void
+  onGetRecommendation: (symbol: string) => void
+  isRetirement: boolean
+}) {
+  if (loading) {
+    return <div className="flex justify-center py-10 text-gray-600"><Spinner /></div>
+  }
+
+  if (recommendation) {
+    return (
+      <div className="space-y-4">
+        <div className="flex items-center gap-3">
+          <RecBadge rec={recommendation} />
+          <span className={`text-[10px] font-semibold uppercase tracking-widest ${isRetirement ? 'text-amber-700' : 'text-violet-600'}`}>
+            Sage{isRetirement ? ' — Retirement' : ' Analysis'}
+          </span>
+        </div>
+        {recommendation.reasoning && (
+          <div className="bg-white/[0.03] border border-white/[0.06] rounded-xl p-4">
+            <p className="text-sm text-gray-300 leading-relaxed">{recommendation.reasoning}</p>
+          </div>
+        )}
+        {recommendation.key_factors?.length > 0 && (
+          <div>
+            <p className="text-[10px] font-semibold uppercase tracking-widest text-gray-600 mb-2">Key Factors</p>
+            <div className="space-y-1.5">
+              {recommendation.key_factors.map((f: string, i: number) => (
+                <div key={i} className="flex gap-2 text-xs text-gray-500 leading-relaxed">
+                  <span className="text-gray-700 shrink-0 mt-0.5">·</span>
+                  <span>{f}</span>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+        {recommendation.recommendation === 'SELL' && recommendation.opportunity_cost && (
+          <div className="bg-emerald-500/[0.04] border border-emerald-500/[0.12] rounded-xl p-4">
+            <p className="text-[10px] font-semibold uppercase tracking-widest text-emerald-700 mb-2">Opportunity Cost</p>
+            <p className="text-xs text-gray-500 mb-1.5">
+              Capital freed:{' '}
+              <span className="text-white font-medium">
+                ${recommendation.opportunity_cost.freed_capital.toLocaleString('en-US', { maximumFractionDigits: 0 })}
+              </span>
+            </p>
+            {recommendation.opportunity_cost.best_position && (
+              <p className="text-xs text-gray-500 mb-1.5">
+                Best performer:{' '}
+                <span className="text-emerald-400 font-medium">{recommendation.opportunity_cost.best_position.symbol}</span>{' '}
+                <span className="text-emerald-400">+{recommendation.opportunity_cost.best_position.return_pct}%</span>
+                <span className="text-gray-600"> all-time</span>
+              </p>
+            )}
+            {recommendation.opportunity_cost.best_sector && (
+              <p className="text-xs text-gray-500">
+                Strongest sector:{' '}
+                <span className="text-emerald-400 font-medium">{recommendation.opportunity_cost.best_sector.name}</span>{' '}
+                <span className="text-emerald-400">+{recommendation.opportunity_cost.best_sector.return_pct}%</span>
+                <span className="text-gray-600"> ({recommendation.opportunity_cost.best_sector.period} trend)</span>
+              </p>
+            )}
+          </div>
+        )}
+        <ActionButtons snapshotId={snapshotId ?? null} currentAction={recAction} onAction={onAction} />
+      </div>
+    )
+  }
+
+  if (error) {
+    return (
+      <div className="text-center py-4">
+        <p className="text-xs text-red-400 mb-3">{error}</p>
+        <button
+          onClick={() => onGetRecommendation(symbol)}
+          className="text-xs border border-red-500/20 text-red-400 hover:text-red-300 px-3 py-1.5 rounded-lg transition"
+        >
+          Retry
+        </button>
+      </div>
+    )
+  }
+
+  return (
+    <div className="flex items-center justify-between gap-3 py-2">
+      <p className="text-xs text-gray-600">Sage hasn't analyzed {symbol} yet.</p>
+      <button
+        onClick={() => onGetRecommendation(symbol)}
+        className="inline-flex items-center gap-1.5 text-xs text-gray-400 hover:text-violet-400 border border-white/[0.08] hover:border-violet-500/30 px-3 py-1.5 rounded-lg transition shrink-0"
+      >
+        <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+          <path strokeLinecap="round" strokeLinejoin="round" d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z" />
+        </svg>
+        Ask Sage
+      </button>
+    </div>
+  )
+}
+
+// ── Option B: Side Drawer (desktop) ─────────────────────────────────────────
 
 interface DrawerProps {
   symbol: string
@@ -157,7 +266,6 @@ function DrawerPanel({
 }: DrawerProps) {
   return (
     <div className="bg-[#0d0d14] border border-white/[0.08] rounded-2xl overflow-hidden sticky top-6">
-      {/* Top bar */}
       <div className="flex items-center justify-between px-5 py-4 border-b border-white/[0.06]">
         <div className="flex items-center gap-3">
           <div className={`w-9 h-9 rounded-xl flex items-center justify-center text-xs font-bold shrink-0 ${
@@ -181,110 +289,62 @@ function DrawerPanel({
           </svg>
         </button>
       </div>
+      <div className="p-5">
+        <AnalysisContent
+          symbol={symbol}
+          recommendation={recommendation}
+          loading={loading}
+          error={error}
+          snapshotId={snapshotId}
+          recAction={recAction}
+          onAction={onAction}
+          onGetRecommendation={onGetRecommendation}
+          isRetirement={isRetirement}
+        />
+      </div>
+    </div>
+  )
+}
 
-      {/* Body */}
-      {loading ? (
-        <div className="flex items-center justify-center py-16 text-gray-600">
-          <Spinner />
-        </div>
-      ) : recommendation ? (
-        <div className="p-5 space-y-4">
-          {/* Badge + source label */}
-          <div className="flex items-center gap-3">
-            <RecBadge rec={recommendation} />
-            <span className={`text-[10px] font-semibold uppercase tracking-widest ${
-              isRetirement ? 'text-amber-700' : 'text-violet-600'
-            }`}>
-              Sage{isRetirement ? ' — Retirement' : ' Analysis'}
-            </span>
-          </div>
+// ── Option A: Inline Expand Row (mobile) ─────────────────────────────────────
 
-          {/* Reasoning */}
-          {recommendation.reasoning && (
-            <div className="bg-white/[0.03] border border-white/[0.06] rounded-xl p-4">
-              <p className="text-sm text-gray-300 leading-relaxed">{recommendation.reasoning}</p>
-            </div>
-          )}
-
-          {/* Key factors */}
-          {recommendation.key_factors?.length > 0 && (
-            <div>
-              <p className="text-[10px] font-semibold uppercase tracking-widest text-gray-600 mb-2">Key Factors</p>
-              <div className="space-y-1.5">
-                {recommendation.key_factors.map((f: string, i: number) => (
-                  <div key={i} className="flex gap-2 text-xs text-gray-500 leading-relaxed">
-                    <span className="text-gray-700 shrink-0 mt-0.5">·</span>
-                    <span>{f}</span>
-                  </div>
-                ))}
-              </div>
-            </div>
-          )}
-
-          {/* Opportunity cost (SELL only) */}
-          {recommendation.recommendation === 'SELL' && recommendation.opportunity_cost && (
-            <div className="bg-emerald-500/[0.04] border border-emerald-500/[0.12] rounded-xl p-4">
-              <p className="text-[10px] font-semibold uppercase tracking-widest text-emerald-700 mb-2">Opportunity Cost</p>
-              <p className="text-xs text-gray-500 mb-1.5">
-                Capital freed:{' '}
-                <span className="text-white font-medium">
-                  ${recommendation.opportunity_cost.freed_capital.toLocaleString('en-US', { maximumFractionDigits: 0 })}
-                </span>
-              </p>
-              {recommendation.opportunity_cost.best_position && (
-                <p className="text-xs text-gray-500 mb-1.5">
-                  Best performer:{' '}
-                  <span className="text-emerald-400 font-medium">{recommendation.opportunity_cost.best_position.symbol}</span>{' '}
-                  <span className="text-emerald-400">+{recommendation.opportunity_cost.best_position.return_pct}%</span>
-                  <span className="text-gray-600"> all-time</span>
-                </p>
-              )}
-              {recommendation.opportunity_cost.best_sector && (
-                <p className="text-xs text-gray-500">
-                  Strongest sector:{' '}
-                  <span className="text-emerald-400 font-medium">{recommendation.opportunity_cost.best_sector.name}</span>{' '}
-                  <span className="text-emerald-400">+{recommendation.opportunity_cost.best_sector.return_pct}%</span>
-                  <span className="text-gray-600"> ({recommendation.opportunity_cost.best_sector.period} trend)</span>
-                </p>
-              )}
-            </div>
-          )}
-
-          {/* Follow / Ignore actions */}
-          <ActionButtons
-            snapshotId={snapshotId ?? null}
-            currentAction={recAction}
+function InlineExpandRow({
+  colSpan, symbol, recommendation, loading, error,
+  snapshotId, recAction, onAction, onGetRecommendation, isRetirement,
+}: {
+  colSpan: number
+  symbol: string
+  recommendation: any
+  loading: boolean
+  error?: string
+  snapshotId?: string
+  recAction?: string
+  onAction: (snapshotId: string, action: 'followed' | 'ignored') => void
+  onGetRecommendation: (symbol: string) => void
+  isRetirement: boolean
+}) {
+  return (
+    <tr className="border-b border-white/[0.04]">
+      <td colSpan={colSpan} className="px-4 pb-4 pt-0">
+        <div className={`rounded-xl border p-4 ${
+          isRetirement
+            ? 'bg-amber-500/[0.03] border-amber-500/[0.10]'
+            : 'bg-violet-500/[0.03] border-violet-500/[0.10]'
+        }`}>
+          <AnalysisContent
+            symbol={symbol}
+            recommendation={recommendation}
+            loading={loading}
+            error={error}
+            snapshotId={snapshotId}
+            recAction={recAction}
             onAction={onAction}
+            onGetRecommendation={onGetRecommendation}
+            isRetirement={isRetirement}
           />
         </div>
-      ) : error ? (
-        <div className="p-6 text-center">
-          <p className="text-xs text-red-400 mb-3">{error}</p>
-          <button
-            onClick={() => onGetRecommendation(symbol)}
-            className="text-xs border border-red-500/20 text-red-400 hover:text-red-300 px-3 py-1.5 rounded-lg transition"
-          >
-            Retry
-          </button>
-        </div>
-      ) : (
-        <div className="p-6 text-center">
-          <svg className="w-7 h-7 text-gray-800 mx-auto mb-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.2}>
-            <path strokeLinecap="round" strokeLinejoin="round" d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z" />
-          </svg>
-          <p className="text-xs text-gray-600 mb-4">Sage hasn't analyzed {symbol} yet.</p>
-          <button
-            onClick={() => onGetRecommendation(symbol)}
-            className="inline-flex items-center gap-1.5 text-xs text-gray-400 hover:text-violet-400 border border-white/[0.08] hover:border-violet-500/30 px-3 py-1.5 rounded-lg transition"
-          >
-            <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-              <path strokeLinecap="round" strokeLinejoin="round" d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z" />
-            </svg>
-            Ask Sage
-          </button>
-        </div>
-      )}
-    </div>
+      </td>
+    </tr>
   )
 }
 
@@ -407,10 +467,7 @@ function PositionRow({
 
 // ── Positions Section ────────────────────────────────────────────────────────
 
-function PositionsSection({
-  title, subtitle, accentClass, positions, recommendations, loadingRec, recErrors,
-  selectedSymbol, onRowClick, onGetRecommendation, readOnly, headerRight, isRetirement,
-}: {
+interface SectionProps {
   title: string
   subtitle: string
   accentClass: string
@@ -418,13 +475,24 @@ function PositionsSection({
   recommendations: Record<string, any>
   loadingRec: Record<string, boolean>
   recErrors: Record<string, string>
+  snapshotIds: Record<string, string>
+  recActions: Record<string, string>
   selectedSymbol: string | null
   onRowClick: (symbol: string) => void
   onGetRecommendation: (symbol: string) => void
+  onAction?: (symbol: string, snapshotId: string, action: 'followed' | 'ignored') => void
   readOnly?: boolean
   headerRight?: React.ReactNode
   isRetirement: boolean
-}) {
+  isMobile: boolean
+}
+
+function PositionsSection({
+  title, subtitle, accentClass, positions, recommendations, loadingRec, recErrors,
+  snapshotIds, recActions, selectedSymbol, onRowClick, onGetRecommendation, onAction,
+  readOnly, headerRight, isRetirement, isMobile,
+}: SectionProps) {
+  const colSpan = readOnly ? 9 : 10
   return (
     <div>
       <div className="px-6 py-4 border-b border-white/[0.06] flex items-center justify-between">
@@ -450,18 +518,33 @@ function PositionsSection({
           </thead>
           <tbody className="divide-y divide-white/[0.04]">
             {positions.map((p) => (
-              <PositionRow
-                key={p.symbol}
-                p={p}
-                recommendations={recommendations}
-                loadingRec={loadingRec}
-                recErrors={recErrors}
-                isSelected={selectedSymbol === p.symbol}
-                onRowClick={onRowClick}
-                onGetRecommendation={onGetRecommendation}
-                readOnly={readOnly}
-                isRetirement={isRetirement}
-              />
+              <Fragment key={p.symbol}>
+                <PositionRow
+                  p={p}
+                  recommendations={recommendations}
+                  loadingRec={loadingRec}
+                  recErrors={recErrors}
+                  isSelected={selectedSymbol === p.symbol}
+                  onRowClick={onRowClick}
+                  onGetRecommendation={onGetRecommendation}
+                  readOnly={readOnly}
+                  isRetirement={isRetirement}
+                />
+                {isMobile && selectedSymbol === p.symbol && (
+                  <InlineExpandRow
+                    colSpan={colSpan}
+                    symbol={p.symbol}
+                    recommendation={recommendations[p.symbol]}
+                    loading={!!loadingRec[p.symbol]}
+                    error={recErrors[p.symbol]}
+                    snapshotId={snapshotIds[p.symbol]}
+                    recAction={recActions[p.symbol]}
+                    onAction={(sid, action) => onAction?.(p.symbol, sid, action)}
+                    onGetRecommendation={onGetRecommendation}
+                    isRetirement={isRetirement}
+                  />
+                )}
+              </Fragment>
             ))}
           </tbody>
         </table>
@@ -485,6 +568,17 @@ interface Props {
   readOnly?: boolean
 }
 
+function useIsMobile(breakpoint = 768) {
+  const [isMobile, setIsMobile] = useState(false)
+  useEffect(() => {
+    const check = () => setIsMobile(window.innerWidth < breakpoint)
+    check()
+    window.addEventListener('resize', check)
+    return () => window.removeEventListener('resize', check)
+  }, [breakpoint])
+  return isMobile
+}
+
 export default function PositionsTable({
   positions, loadingRec, recommendations, recErrors,
   snapshotIds = {}, recActions = {}, onGetRecommendation, onAction, onImportClick, readOnly,
@@ -492,6 +586,7 @@ export default function PositionsTable({
   const [loadingAllPersonal, setLoadingAllPersonal] = useState(false)
   const [loadingAllRetirement, setLoadingAllRetirement] = useState(false)
   const [selectedSymbol, setSelectedSymbol] = useState<string | null>(null)
+  const isMobile = useIsMobile()
 
   const personalPositions = positions.filter(p => !RETIREMENT_TYPES.has(p.account_type ?? 'individual'))
   const retirementPositions = positions.filter(p => RETIREMENT_TYPES.has(p.account_type ?? 'individual'))
@@ -503,14 +598,11 @@ export default function PositionsTable({
   const isSelectedRetirement = selectedPosition
     ? RETIREMENT_TYPES.has(selectedPosition.account_type ?? 'individual')
     : false
-  const drawerOpen = selectedSymbol !== null && selectedPosition !== null
+  // Drawer is only shown on desktop
+  const drawerOpen = !isMobile && selectedSymbol !== null && selectedPosition !== null
 
   function handleRowClick(symbol: string) {
     setSelectedSymbol(prev => prev === symbol ? null : symbol)
-  }
-
-  function handleCloseDrawer() {
-    setSelectedSymbol(null)
   }
 
   if (positions.length === 0) {
@@ -573,7 +665,7 @@ export default function PositionsTable({
     )
   }
 
-  // ── Shared drawer renderer ─────────────────────────────────────────────────
+  // Desktop drawer element
   const drawerEl = drawerOpen && selectedPosition ? (
     <DrawerPanel
       symbol={selectedSymbol!}
@@ -585,64 +677,81 @@ export default function PositionsTable({
       recAction={recActions[selectedSymbol!]}
       onAction={(sid, action) => onAction?.(selectedSymbol!, sid, action)}
       onGetRecommendation={onGetRecommendation}
-      onClose={handleCloseDrawer}
+      onClose={() => setSelectedSymbol(null)}
       isRetirement={isSelectedRetirement}
     />
   ) : null
 
-  // ── Single section layout ──────────────────────────────────────────────────
-  if (!hasBoth) {
-    const isRetirement = hasRetirement
-    const group = isRetirement ? retirementPositions : personalPositions
-    return (
-      <div
-        style={{
-          display: 'grid',
-          gridTemplateColumns: drawerOpen ? '1fr 380px' : '1fr 0px',
-          gap: drawerOpen ? '16px' : '0px',
-          transition: 'grid-template-columns 0.25s cubic-bezier(.4,0,.2,1), gap 0.25s',
-          alignItems: 'start',
-        }}
-      >
-        <div className="min-w-0 bg-white/[0.03] border border-white/[0.08] rounded-2xl overflow-hidden">
-          <div className="px-6 py-5 border-b border-white/[0.06] flex items-center justify-between">
-            <h2 className="font-semibold">Positions</h2>
-            <AskAllButton
-              group={group}
-              loading={isRetirement ? loadingAllRetirement : loadingAllPersonal}
-              setLoading={isRetirement ? setLoadingAllRetirement : setLoadingAllPersonal}
-            />
-          </div>
-          <PositionsSection
-            title={isRetirement ? 'Retirement' : 'Brokerage'}
-            subtitle={isRetirement
-              ? 'Sage recommends rebalancing actions — no sell signals for retirement accounts'
-              : 'Sage gives Buy / Hold / Sell recommendations based on your investment style'}
-            accentClass={isRetirement ? 'bg-amber-400' : 'bg-violet-400'}
-            positions={group}
-            recommendations={recommendations}
-            loadingRec={loadingRec}
-            recErrors={recErrors}
-            selectedSymbol={selectedSymbol}
-            onRowClick={handleRowClick}
-            onGetRecommendation={onGetRecommendation}
-            readOnly={readOnly}
-            isRetirement={isRetirement}
-          />
-        </div>
-        <div style={{ overflow: 'hidden' }}>
-          <div
-            style={{ width: '380px' }}
-            className={`transition-all duration-200 ${drawerOpen ? 'opacity-100 translate-x-0' : 'opacity-0 translate-x-5 pointer-events-none'}`}
-          >
-            {drawerEl}
-          </div>
-        </div>
-      </div>
-    )
+  // Shared section props
+  const sharedSectionProps = {
+    recommendations, loadingRec, recErrors, snapshotIds, recActions,
+    selectedSymbol, onRowClick: handleRowClick, onGetRecommendation, onAction,
+    readOnly, isMobile,
   }
 
-  // ── Two-section layout (brokerage + retirement) ────────────────────────────
+  // The section cards (left column on desktop, full-width on mobile)
+  const sectionCards = !hasBoth ? (
+    <div className="bg-white/[0.03] border border-white/[0.08] rounded-2xl overflow-hidden">
+      <div className="px-6 py-5 border-b border-white/[0.06] flex items-center justify-between">
+        <h2 className="font-semibold">Positions</h2>
+        <AskAllButton
+          group={positions}
+          loading={hasRetirement ? loadingAllRetirement : loadingAllPersonal}
+          setLoading={hasRetirement ? setLoadingAllRetirement : setLoadingAllPersonal}
+        />
+      </div>
+      <PositionsSection
+        {...sharedSectionProps}
+        title={hasRetirement ? 'Retirement' : 'Brokerage'}
+        subtitle={hasRetirement
+          ? 'Sage recommends rebalancing actions — no sell signals for retirement accounts'
+          : 'Sage gives Buy / Hold / Sell recommendations based on your investment style'}
+        accentClass={hasRetirement ? 'bg-amber-400' : 'bg-violet-400'}
+        positions={positions}
+        isRetirement={hasRetirement}
+      />
+    </div>
+  ) : (
+    <div className="space-y-4">
+      <div className="bg-white/[0.03] border border-white/[0.08] rounded-2xl overflow-hidden">
+        <PositionsSection
+          {...sharedSectionProps}
+          title="Brokerage"
+          subtitle="Buy / Hold / Sell recommendations based on your investment style"
+          accentClass="bg-violet-400"
+          positions={personalPositions}
+          isRetirement={false}
+          headerRight={<AskAllButton group={personalPositions} loading={loadingAllPersonal} setLoading={setLoadingAllPersonal} />}
+        />
+      </div>
+      <div className="bg-white/[0.03] border border-amber-500/[0.08] rounded-2xl overflow-hidden">
+        <PositionsSection
+          {...sharedSectionProps}
+          title="Retirement Accounts"
+          subtitle="Sage recommends rebalancing actions — no sell signals, focused on allocation balance"
+          accentClass="bg-amber-400"
+          positions={retirementPositions}
+          isRetirement={true}
+          headerRight={<AskAllButton group={retirementPositions} loading={loadingAllRetirement} setLoading={setLoadingAllRetirement} />}
+        />
+        <div className="px-6 py-3 border-t border-white/[0.04] flex items-center gap-2 bg-amber-500/[0.03]">
+          <svg className="w-3.5 h-3.5 text-amber-500/60 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+            <path strokeLinecap="round" strokeLinejoin="round" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+          </svg>
+          <p className="text-xs text-amber-500/60">
+            Add your retirement year and age in your profile to unlock glide path alignment scoring for these accounts.
+          </p>
+        </div>
+      </div>
+    </div>
+  )
+
+  // Mobile: just the cards (inline expand handled inside PositionsSection)
+  if (isMobile) {
+    return sectionCards
+  }
+
+  // Desktop: grid with side drawer
   return (
     <div
       style={{
@@ -653,68 +762,7 @@ export default function PositionsTable({
         alignItems: 'start',
       }}
     >
-      {/* Left: section cards */}
-      <div className="min-w-0 space-y-4">
-        {/* Brokerage */}
-        <div className="bg-white/[0.03] border border-white/[0.08] rounded-2xl overflow-hidden">
-          <PositionsSection
-            title="Brokerage"
-            subtitle="Buy / Hold / Sell recommendations based on your investment style"
-            accentClass="bg-violet-400"
-            positions={personalPositions}
-            recommendations={recommendations}
-            loadingRec={loadingRec}
-            recErrors={recErrors}
-            selectedSymbol={selectedSymbol}
-            onRowClick={handleRowClick}
-            onGetRecommendation={onGetRecommendation}
-            readOnly={readOnly}
-            isRetirement={false}
-            headerRight={
-              <AskAllButton
-                group={personalPositions}
-                loading={loadingAllPersonal}
-                setLoading={setLoadingAllPersonal}
-              />
-            }
-          />
-        </div>
-
-        {/* Retirement */}
-        <div className="bg-white/[0.03] border border-amber-500/[0.08] rounded-2xl overflow-hidden">
-          <PositionsSection
-            title="Retirement Accounts"
-            subtitle="Sage recommends rebalancing actions — no sell signals, focused on allocation balance"
-            accentClass="bg-amber-400"
-            positions={retirementPositions}
-            recommendations={recommendations}
-            loadingRec={loadingRec}
-            recErrors={recErrors}
-            selectedSymbol={selectedSymbol}
-            onRowClick={handleRowClick}
-            onGetRecommendation={onGetRecommendation}
-            readOnly={readOnly}
-            isRetirement={true}
-            headerRight={
-              <AskAllButton
-                group={retirementPositions}
-                loading={loadingAllRetirement}
-                setLoading={setLoadingAllRetirement}
-              />
-            }
-          />
-          <div className="px-6 py-3 border-t border-white/[0.04] flex items-center gap-2 bg-amber-500/[0.03]">
-            <svg className="w-3.5 h-3.5 text-amber-500/60 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-              <path strokeLinecap="round" strokeLinejoin="round" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-            </svg>
-            <p className="text-xs text-amber-500/60">
-              Add your retirement year and age in your profile to unlock glide path alignment scoring for these accounts.
-            </p>
-          </div>
-        </div>
-      </div>
-
-      {/* Right: drawer */}
+      <div className="min-w-0">{sectionCards}</div>
       <div style={{ overflow: 'hidden' }}>
         <div
           style={{ width: '380px' }}
