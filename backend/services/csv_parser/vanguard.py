@@ -143,6 +143,44 @@ def _cost_basis_map(
     return {sym: h for sym, h in holdings.items() if h["total_cost"] > 0}
 
 
+def _normalize_vanguard_account_type(raw: str) -> str:
+    """Map Vanguard Account Type strings to our internal account_type values."""
+    s = raw.upper().strip()
+    if "ROTH" in s and "401" in s:
+        return "roth_401k"
+    if "401" in s:
+        return "401k"
+    if "ROTH" in s:
+        return "roth_ira"
+    if "SEP" in s:
+        return "sep_ira"
+    if "ROLLOVER" in s:
+        return "rollover_ira"
+    if "IRA" in s or "TRADITIONAL" in s:
+        return "ira"
+    if "HSA" in s or "HEALTH" in s:
+        return "hsa"
+    return "individual"
+
+
+def _account_type_map_from_transactions(lines: List[str]) -> Dict[str, str]:
+    """
+    Build {account_number: account_type} from the Vanguard transactions section,
+    which contains an 'Account Type' column.
+    """
+    header_index = _find_header_index(lines, ["Trade Date", "Transaction Type"])
+    if header_index is None:
+        return {}
+    reader = csv.DictReader(io.StringIO("\n".join(lines[header_index:])))
+    mapping: Dict[str, str] = {}
+    for row in reader:
+        acct_num = (row.get("Account Number") or "").strip()
+        acct_type_raw = (row.get("Account Type") or "").strip()
+        if acct_num and acct_type_raw and acct_num not in mapping:
+            mapping[acct_num] = _normalize_vanguard_account_type(acct_type_raw)
+    return mapping
+
+
 def parse_vanguard_positions(csv_text: str) -> List[Dict[str, Any]]:
     lines = csv_text.splitlines()
 
@@ -165,15 +203,19 @@ def parse_vanguard_positions(csv_text: str) -> List[Dict[str, Any]]:
 
     reader = csv.DictReader(io.StringIO("\n".join(pos_lines)))
 
-    # Try to compute cost basis from the transactions section
+    # Try to compute cost basis and account type from the transactions section
     transactions = _parse_transactions_section(lines)
     cost_map = _cost_basis_map(transactions) if transactions else {}
+    acct_type_map = _account_type_map_from_transactions(lines)
 
     positions = []
     for row in reader:
         symbol = (row.get("Symbol") or "").strip()
         if not symbol or symbol.isdigit() or len(symbol) > 6:
             continue
+
+        acct_num = (row.get("Account Number") or "").strip()
+        account_type = acct_type_map.get(acct_num, "individual")
 
         shares = _clean_number(row.get("Shares", ""))
         share_price = _clean_number(row.get("Share Price", ""))
@@ -213,6 +255,7 @@ def parse_vanguard_positions(csv_text: str) -> List[Dict[str, Any]]:
             "total_gain_loss_percent": gain_loss_pct,
             "percent_of_account": None,
             "average_cost_basis": avg_cost,
+            "account_type": account_type,
         })
 
     return positions

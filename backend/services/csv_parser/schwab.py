@@ -32,8 +32,31 @@ def _clean_number(value: str) -> float | None:
         return None
 
 
+def _detect_schwab_account_type(header_line: str) -> str:
+    """Detect account type from Schwab's first header line."""
+    s = header_line.upper()
+    if "ROTH" in s and "401" in s:
+        return "roth_401k"
+    if "401" in s:
+        return "401k"
+    if "ROTH" in s and "IRA" in s:
+        return "roth_ira"
+    if "SEP" in s and "IRA" in s:
+        return "sep_ira"
+    if "ROLLOVER" in s and "IRA" in s:
+        return "rollover_ira"
+    if "IRA" in s:
+        return "ira"
+    if "HSA" in s or "HEALTH SAVINGS" in s:
+        return "hsa"
+    return "individual"
+
+
 def parse_schwab_positions(csv_text: str) -> List[Dict[str, Any]]:
     lines = csv_text.splitlines()
+
+    # Detect account type from the first line (e.g. "Positions for Roth IRA account XXXX as of ...")
+    account_type = _detect_schwab_account_type(lines[0]) if lines else "individual"
 
     # Find the header row — contains "Symbol" and "Market Value"
     header_index = None
@@ -86,6 +109,7 @@ def parse_schwab_positions(csv_text: str) -> List[Dict[str, Any]]:
             "total_gain_loss_percent": gain_loss_pct,
             "percent_of_account": pct_of_account,
             "average_cost_basis": avg_cost,
+            "account_type": account_type,
         })
 
     return positions
