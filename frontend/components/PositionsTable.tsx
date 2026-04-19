@@ -141,9 +141,9 @@ function RecBadge({ rec, snapshotId, recAction, onAction }: { rec: any; snapshot
         const spaceAbove = rect.top
         const right = Math.max(8, window.innerWidth - rect.right)
         if (spaceBelow < spaceAbove) {
-          setPopoverStyle({ position: 'fixed', bottom: window.innerHeight - rect.top + 4, right, maxHeight: spaceAbove - 8 })
+          setPopoverStyle({ position: 'fixed', bottom: window.innerHeight - rect.top + 4, right })
         } else {
-          setPopoverStyle({ position: 'fixed', top: rect.bottom + 4, right, maxHeight: spaceBelow - 8 })
+          setPopoverStyle({ position: 'fixed', top: rect.bottom + 4, right })
         }
       }
       setOpen(true)
@@ -169,7 +169,7 @@ function RecBadge({ rec, snapshotId, recAction, onAction }: { rec: any; snapshot
       {open && (
         <div
           style={popoverStyle}
-          className="z-50 w-72 bg-[#13131f] border border-white/[0.10] rounded-xl shadow-2xl p-4 text-left overflow-y-auto"
+          className="z-50 w-80 bg-[#13131f] border border-white/[0.10] rounded-xl shadow-2xl p-4 text-left"
           onMouseEnter={() => clearTimeout(timerRef.current)}
           onMouseLeave={handleMouseLeave}
         >
@@ -241,18 +241,199 @@ interface Props {
   readOnly?: boolean
 }
 
+function PositionRow({ p, recommendations, loadingRec, recErrors, snapshotIds, recActions, onGetRecommendation, onAction, readOnly }: {
+  p: Position
+  recommendations: Record<string, any>
+  loadingRec: Record<string, boolean>
+  recErrors: Record<string, string>
+  snapshotIds: Record<string, string>
+  recActions: Record<string, string>
+  onGetRecommendation: (symbol: string) => void
+  onAction?: (symbol: string, snapshotId: string, action: 'followed' | 'ignored') => void
+  readOnly?: boolean
+}) {
+  return (
+    <tr className="hover:bg-white/[0.02] transition-colors">
+      <td className="px-5 py-4">
+        <div className="flex items-center gap-3">
+          <div className="w-8 h-8 rounded-lg bg-violet-500/10 border border-violet-500/20 flex items-center justify-center text-xs font-bold text-violet-300 shrink-0">
+            {p.symbol.slice(0, 2)}
+          </div>
+          <div>
+            <div className="flex items-center gap-1.5">
+              <span className="font-semibold text-white">{p.symbol}</span>
+              {p.account_type && p.account_type !== 'individual' && (
+                <span className="text-[10px] font-medium px-1.5 py-0.5 rounded bg-amber-500/10 text-amber-400 border border-amber-500/20">
+                  {ACCOUNT_TYPE_LABEL[p.account_type] ?? p.account_type}
+                </span>
+              )}
+            </div>
+            <div className="text-gray-600 text-xs truncate max-w-[140px]">{p.description}</div>
+          </div>
+        </div>
+      </td>
+      <td className="px-5 py-4">
+        {p.sector
+          ? <span className="text-xs bg-white/[0.05] border border-white/[0.08] px-2.5 py-1 rounded-full text-gray-400">{p.sector}</span>
+          : <span className="text-gray-700">—</span>}
+      </td>
+      <td className="px-5 py-4 text-right text-gray-300">{p.total_shares ?? '—'}</td>
+      <td className="px-5 py-4 text-right text-gray-300">{fmt(p.current_price, '$')}</td>
+      <td className="px-5 py-4 text-right font-semibold text-white">{fmt(p.current_value, '$')}</td>
+      <td className="px-5 py-4 text-right text-gray-500">
+        {p.total_cost_basis != null ? fmt(p.total_cost_basis, '$') : <NoCostBasis />}
+      </td>
+      <td className={`px-5 py-4 text-right font-medium ${gainColor(p.total_gain_loss)}`}>
+        {p.total_gain_loss != null
+          ? (p.total_gain_loss >= 0 ? '+$' : '−$') + Math.abs(p.total_gain_loss).toLocaleString('en-US', { minimumFractionDigits: 2 })
+          : <span className="text-gray-700">—</span>}
+      </td>
+      <td className="px-5 py-4 text-right">
+        {p.total_gain_loss_percent != null ? (
+          <span className={`text-xs px-2 py-1 rounded-lg font-medium ${gainBg(p.total_gain_loss_percent)}`}>
+            {p.total_gain_loss_percent >= 0 ? '+' : ''}{p.total_gain_loss_percent.toFixed(2)}%
+          </span>
+        ) : <span className="text-gray-700">—</span>}
+      </td>
+      <td className="px-5 py-4 text-right">
+        {(() => {
+          const { current_price, previous_close, total_shares } = p
+          if (current_price == null || previous_close == null) return <span className="text-gray-700">—</span>
+          const dayPct = ((current_price - previous_close) / previous_close) * 100
+          const dayDollar = total_shares != null ? (current_price - previous_close) * total_shares : null
+          const pos = dayPct >= 0
+          return (
+            <div className="flex flex-col items-end gap-0.5">
+              <span className={`text-xs font-semibold ${pos ? 'text-emerald-400' : 'text-red-400'}`}>
+                {pos ? '+' : ''}{dayPct.toFixed(2)}%
+              </span>
+              {dayDollar != null && (
+                <span className={`text-[11px] ${pos ? 'text-emerald-500/70' : 'text-red-500/70'}`}>
+                  {pos ? '+$' : '−$'}{Math.abs(dayDollar).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                </span>
+              )}
+            </div>
+          )
+        })()}
+      </td>
+      {!readOnly && (
+        <td className="px-5 py-4 text-right">
+          {loadingRec[p.symbol] ? (
+            <span className="inline-flex justify-center w-full"><Spinner /></span>
+          ) : recommendations[p.symbol] ? (
+            <RecBadge
+              rec={recommendations[p.symbol]}
+              snapshotId={snapshotIds[p.symbol] ?? null}
+              recAction={recActions[p.symbol]}
+              onAction={(sid, action) => onAction?.(p.symbol, sid, action)}
+            />
+          ) : recErrors[p.symbol] ? (
+            <button
+              onClick={() => onGetRecommendation(p.symbol)}
+              title={recErrors[p.symbol]}
+              className="text-xs text-red-400 hover:text-red-300 border border-red-500/20 hover:border-red-500/40 px-2.5 py-1 rounded-lg transition"
+            >
+              Retry
+            </button>
+          ) : (
+            <button
+              onClick={() => onGetRecommendation(p.symbol)}
+              className="text-xs text-gray-600 hover:text-violet-400 border border-white/[0.06] hover:border-violet-500/30 px-2.5 py-1 rounded-lg transition"
+            >
+              Ask Sage
+            </button>
+          )}
+        </td>
+      )}
+    </tr>
+  )
+}
+
+function PositionsSection({
+  title,
+  subtitle,
+  accentClass,
+  positions,
+  recommendations,
+  loadingRec,
+  recErrors,
+  snapshotIds,
+  recActions,
+  onGetRecommendation,
+  onAction,
+  readOnly,
+  headerRight,
+}: {
+  title: string
+  subtitle: string
+  accentClass: string
+  positions: Position[]
+  recommendations: Record<string, any>
+  loadingRec: Record<string, boolean>
+  recErrors: Record<string, string>
+  snapshotIds: Record<string, string>
+  recActions: Record<string, string>
+  onGetRecommendation: (symbol: string) => void
+  onAction?: (symbol: string, snapshotId: string, action: 'followed' | 'ignored') => void
+  readOnly?: boolean
+  headerRight?: React.ReactNode
+}) {
+  return (
+    <div>
+      {/* Section header */}
+      <div className="px-6 py-4 border-b border-white/[0.06] flex items-center justify-between">
+        <div>
+          <div className="flex items-center gap-2">
+            <span className={`w-1.5 h-1.5 rounded-full ${accentClass}`} />
+            <h3 className="font-semibold text-sm">{title}</h3>
+            <span className="text-xs text-gray-600">{positions.length} position{positions.length !== 1 ? 's' : ''}</span>
+          </div>
+          <p className="text-xs text-gray-600 mt-0.5 ml-3.5">{subtitle}</p>
+        </div>
+        {headerRight}
+      </div>
+
+      {/* Table */}
+      <div className="overflow-x-auto">
+        <table className="w-full min-w-[700px] text-sm">
+          <thead>
+            <tr className="border-b border-white/[0.04]">
+              {['Symbol', 'Sector', 'Shares', 'Price', 'Value', 'Cost Basis', 'Gain / Loss', '%', 'Day', ...(readOnly ? [] : ['Sage'])].map((h, i) => (
+                <th key={h} className={`px-5 py-3 text-xs font-medium text-gray-600 uppercase tracking-wider ${i < 2 ? 'text-left' : 'text-right'}`}>{h}</th>
+              ))}
+            </tr>
+          </thead>
+          <tbody className="divide-y divide-white/[0.04]">
+            {positions.map((p) => (
+              <PositionRow
+                key={p.symbol}
+                p={p}
+                recommendations={recommendations}
+                loadingRec={loadingRec}
+                recErrors={recErrors}
+                snapshotIds={snapshotIds}
+                recActions={recActions}
+                onGetRecommendation={onGetRecommendation}
+                onAction={onAction}
+                readOnly={readOnly}
+              />
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  )
+}
+
 export default function PositionsTable({ positions, loadingRec, recommendations, recErrors, snapshotIds = {}, recActions = {}, onGetRecommendation, onAction, onImportClick, readOnly }: Props) {
-  const [loadingAll, setLoadingAll] = useState(false)
-  const [tab, setTab] = useState<'all' | 'personal' | 'retirement'>('all')
+  const [loadingAllPersonal, setLoadingAllPersonal] = useState(false)
+  const [loadingAllRetirement, setLoadingAllRetirement] = useState(false)
 
-  const hasPersonal = positions.some(p => !RETIREMENT_TYPES.has(p.account_type ?? 'individual'))
-  const hasRetirement = positions.some(p => RETIREMENT_TYPES.has(p.account_type ?? 'individual'))
-  const showTabs = hasPersonal && hasRetirement
-
-  const visiblePositions = !showTabs || tab === 'all' ? positions
-    : tab === 'personal'
-      ? positions.filter(p => !RETIREMENT_TYPES.has(p.account_type ?? 'individual'))
-      : positions.filter(p => RETIREMENT_TYPES.has(p.account_type ?? 'individual'))
+  const personalPositions = positions.filter(p => !RETIREMENT_TYPES.has(p.account_type ?? 'individual'))
+  const retirementPositions = positions.filter(p => RETIREMENT_TYPES.has(p.account_type ?? 'individual'))
+  const hasPersonal = personalPositions.length > 0
+  const hasRetirement = retirementPositions.length > 0
+  const hasBoth = hasPersonal && hasRetirement
 
   if (positions.length === 0) {
     return (
@@ -277,163 +458,116 @@ export default function PositionsTable({ positions, loadingRec, recommendations,
     )
   }
 
-  const pending = visiblePositions.filter(p => !recommendations[p.symbol] && !loadingRec[p.symbol])
-  const doneCount = visiblePositions.filter(p => recommendations[p.symbol]).length
-
-  async function handleAskAll() {
-    setLoadingAll(true)
+  async function handleAskAll(group: Position[], setLoading: (v: boolean) => void) {
+    setLoading(true)
+    const pending = group.filter(p => !recommendations[p.symbol] && !loadingRec[p.symbol])
     for (const p of pending) {
       onGetRecommendation(p.symbol)
-      // Small delay so we don't fire 51 requests simultaneously
       await new Promise(r => setTimeout(r, 350))
     }
-    setLoadingAll(false)
+    setLoading(false)
   }
 
-  return (
-    <div className="bg-white/[0.03] border border-white/[0.08] rounded-2xl overflow-hidden">
-      <div className="px-6 py-5 border-b border-white/[0.06] flex items-center justify-between">
-        <div className="flex items-center gap-4">
-          <h2 className="font-semibold">Positions</h2>
-          {showTabs && (
-            <div className="flex items-center gap-1 bg-white/[0.04] border border-white/[0.06] rounded-lg p-0.5">
-              {(['all', 'personal', 'retirement'] as const).map(t => (
-                <button key={t} onClick={() => setTab(t)}
-                  className={`px-3 py-1 rounded-md text-xs font-medium transition capitalize ${tab === t ? 'bg-white/[0.10] text-white' : 'text-gray-500 hover:text-gray-300'}`}
-                >
-                  {t}
-                </button>
-              ))}
-            </div>
-          )}
-        </div>
-        {positions.length > 0 && !readOnly && (
-          <div className="flex items-center gap-3">
-            {doneCount > 0 && (
-              <span className="text-xs text-gray-600">{doneCount}/{positions.length} analyzed</span>
-            )}
-            <button
-              onClick={handleAskAll}
-              disabled={loadingAll || pending.length === 0}
-              className="flex items-center gap-1.5 text-xs text-gray-400 hover:text-violet-400 border border-white/[0.08] hover:border-violet-500/30 px-3 py-1.5 rounded-lg transition disabled:opacity-40 disabled:cursor-not-allowed"
-            >
-              {loadingAll ? <Spinner small /> : (
-                <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z" />
-                </svg>
-              )}
-              {loadingAll ? 'Analyzing…' : pending.length === 0 ? 'All analyzed' : `Ask Sage for all`}
-            </button>
-          </div>
+  function AskAllButton({ group, loading, setLoading }: { group: Position[]; loading: boolean; setLoading: (v: boolean) => void }) {
+    const pending = group.filter(p => !recommendations[p.symbol] && !loadingRec[p.symbol])
+    const doneCount = group.filter(p => recommendations[p.symbol]).length
+    if (readOnly) return null
+    return (
+      <div className="flex items-center gap-2">
+        {doneCount > 0 && (
+          <span className="text-xs text-gray-600">{doneCount}/{group.length} analyzed</span>
         )}
+        <button
+          onClick={() => handleAskAll(group, setLoading)}
+          disabled={loading || pending.length === 0}
+          className="flex items-center gap-1.5 text-xs text-gray-400 hover:text-violet-400 border border-white/[0.08] hover:border-violet-500/30 px-3 py-1.5 rounded-lg transition disabled:opacity-40 disabled:cursor-not-allowed"
+        >
+          {loading ? <Spinner small /> : (
+            <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z" />
+            </svg>
+          )}
+          {loading ? 'Analyzing…' : pending.length === 0 ? 'All analyzed' : 'Ask Sage'}
+        </button>
       </div>
-      <div className="overflow-x-auto">
-        <table className="w-full min-w-[700px] text-sm">
-          <thead>
-            <tr className="border-b border-white/[0.06]">
-              {['Symbol', 'Sector', 'Shares', 'Price', 'Value', 'Cost Basis', 'Gain / Loss', '%', 'Day', ...(readOnly ? [] : ['Sage'])].map((h, i) => (
-                <th key={h} className={`px-5 py-3.5 text-xs font-medium text-gray-500 uppercase tracking-wider ${i < 2 ? 'text-left' : 'text-right'}`}>{h}</th>
-              ))}
-            </tr>
-          </thead>
-          <tbody className="divide-y divide-white/[0.04]">
-            {visiblePositions.map((p) => (
-              <tr key={p.symbol} className="hover:bg-white/[0.02] transition-colors">
-                <td className="px-5 py-4">
-                  <div className="flex items-center gap-3">
-                    <div className="w-8 h-8 rounded-lg bg-violet-500/10 border border-violet-500/20 flex items-center justify-center text-xs font-bold text-violet-300 shrink-0">
-                      {p.symbol.slice(0, 2)}
-                    </div>
-                    <div>
-                      <div className="flex items-center gap-1.5">
-                        <span className="font-semibold text-white">{p.symbol}</span>
-                        {p.account_type && p.account_type !== 'individual' && (
-                          <span className="text-[10px] font-medium px-1.5 py-0.5 rounded bg-amber-500/10 text-amber-400 border border-amber-500/20">
-                            {ACCOUNT_TYPE_LABEL[p.account_type] ?? p.account_type}
-                          </span>
-                        )}
-                      </div>
-                      <div className="text-gray-600 text-xs truncate max-w-[140px]">{p.description}</div>
-                    </div>
-                  </div>
-                </td>
-                <td className="px-5 py-4">
-                  {p.sector
-                    ? <span className="text-xs bg-white/[0.05] border border-white/[0.08] px-2.5 py-1 rounded-full text-gray-400">{p.sector}</span>
-                    : <span className="text-gray-700">—</span>}
-                </td>
-                <td className="px-5 py-4 text-right text-gray-300">{p.total_shares ?? '—'}</td>
-                <td className="px-5 py-4 text-right text-gray-300">{fmt(p.current_price, '$')}</td>
-                <td className="px-5 py-4 text-right font-semibold text-white">{fmt(p.current_value, '$')}</td>
-                <td className="px-5 py-4 text-right text-gray-500">
-                  {p.total_cost_basis != null ? fmt(p.total_cost_basis, '$') : <NoCostBasis />}
-                </td>
-                <td className={`px-5 py-4 text-right font-medium ${gainColor(p.total_gain_loss)}`}>
-                  {p.total_gain_loss != null
-                    ? (p.total_gain_loss >= 0 ? '+$' : '−$') + Math.abs(p.total_gain_loss).toLocaleString('en-US', { minimumFractionDigits: 2 })
-                    : <span className="text-gray-700">—</span>}
-                </td>
-                <td className="px-5 py-4 text-right">
-                  {p.total_gain_loss_percent != null ? (
-                    <span className={`text-xs px-2 py-1 rounded-lg font-medium ${gainBg(p.total_gain_loss_percent)}`}>
-                      {p.total_gain_loss_percent >= 0 ? '+' : ''}{p.total_gain_loss_percent.toFixed(2)}%
-                    </span>
-                  ) : <span className="text-gray-700">—</span>}
-                </td>
-                <td className="px-5 py-4 text-right">
-                  {(() => {
-                    const { current_price, previous_close, total_shares } = p
-                    if (current_price == null || previous_close == null) return <span className="text-gray-700">—</span>
-                    const dayPct = ((current_price - previous_close) / previous_close) * 100
-                    const dayDollar = total_shares != null ? (current_price - previous_close) * total_shares : null
-                    const pos = dayPct >= 0
-                    return (
-                      <div className="flex flex-col items-end gap-0.5">
-                        <span className={`text-xs font-semibold ${pos ? 'text-emerald-400' : 'text-red-400'}`}>
-                          {pos ? '+' : ''}{dayPct.toFixed(2)}%
-                        </span>
-                        {dayDollar != null && (
-                          <span className={`text-[11px] ${pos ? 'text-emerald-500/70' : 'text-red-500/70'}`}>
-                            {pos ? '+$' : '−$'}{Math.abs(dayDollar).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                          </span>
-                        )}
-                      </div>
-                    )
-                  })()}
-                </td>
-                {!readOnly && (
-                  <td className="px-5 py-4 text-right">
-                    {loadingRec[p.symbol] ? (
-                      <span className="inline-flex justify-center w-full"><Spinner /></span>
-                    ) : recommendations[p.symbol] ? (
-                      <RecBadge
-                        rec={recommendations[p.symbol]}
-                        snapshotId={snapshotIds[p.symbol] ?? null}
-                        recAction={recActions[p.symbol]}
-                        onAction={(sid, action) => onAction?.(p.symbol, sid, action)}
-                      />
-                    ) : recErrors[p.symbol] ? (
-                      <button
-                        onClick={() => onGetRecommendation(p.symbol)}
-                        title={recErrors[p.symbol]}
-                        className="text-xs text-red-400 hover:text-red-300 border border-red-500/20 hover:border-red-500/40 px-2.5 py-1 rounded-lg transition"
-                      >
-                        Retry
-                      </button>
-                    ) : (
-                      <button
-                        onClick={() => onGetRecommendation(p.symbol)}
-                        className="text-xs text-gray-600 hover:text-violet-400 border border-white/[0.06] hover:border-violet-500/30 px-2.5 py-1 rounded-lg transition"
-                      >
-                        Ask Sage
-                      </button>
-                    )}
-                  </td>
-                )}
-              </tr>
-            ))}
-          </tbody>
-        </table>
+    )
+  }
+
+  // Single account type — simple layout with one header
+  if (!hasBoth) {
+    const isRetirement = hasRetirement
+    return (
+      <div className="bg-white/[0.03] border border-white/[0.08] rounded-2xl overflow-hidden">
+        <div className="px-6 py-5 border-b border-white/[0.06] flex items-center justify-between">
+          <h2 className="font-semibold">Positions</h2>
+          <AskAllButton group={positions} loading={isRetirement ? loadingAllRetirement : loadingAllPersonal} setLoading={isRetirement ? setLoadingAllRetirement : setLoadingAllPersonal} />
+        </div>
+        <PositionsSection
+          title={isRetirement ? 'Retirement' : 'Brokerage'}
+          subtitle={isRetirement ? 'Sage recommends rebalancing actions — no sell signals for retirement accounts' : 'Sage gives Buy / Hold / Sell recommendations based on your investment style'}
+          accentClass={isRetirement ? 'bg-amber-400' : 'bg-violet-400'}
+          positions={positions}
+          recommendations={recommendations}
+          loadingRec={loadingRec}
+          recErrors={recErrors}
+          snapshotIds={snapshotIds}
+          recActions={recActions}
+          onGetRecommendation={onGetRecommendation}
+          onAction={onAction}
+          readOnly={readOnly}
+        />
+      </div>
+    )
+  }
+
+  // Both account types — two distinct sections
+  return (
+    <div className="space-y-4">
+      {/* Brokerage section */}
+      <div className="bg-white/[0.03] border border-white/[0.08] rounded-2xl overflow-hidden">
+        <PositionsSection
+          title="Brokerage"
+          subtitle="Buy / Hold / Sell recommendations based on your investment style"
+          accentClass="bg-violet-400"
+          positions={personalPositions}
+          recommendations={recommendations}
+          loadingRec={loadingRec}
+          recErrors={recErrors}
+          snapshotIds={snapshotIds}
+          recActions={recActions}
+          onGetRecommendation={onGetRecommendation}
+          onAction={onAction}
+          readOnly={readOnly}
+          headerRight={<AskAllButton group={personalPositions} loading={loadingAllPersonal} setLoading={setLoadingAllPersonal} />}
+        />
+      </div>
+
+      {/* Retirement section */}
+      <div className="bg-white/[0.03] border border-amber-500/[0.08] rounded-2xl overflow-hidden">
+        <PositionsSection
+          title="Retirement Accounts"
+          subtitle="Sage recommends rebalancing actions — no sell signals, focused on allocation balance"
+          accentClass="bg-amber-400"
+          positions={retirementPositions}
+          recommendations={recommendations}
+          loadingRec={loadingRec}
+          recErrors={recErrors}
+          snapshotIds={snapshotIds}
+          recActions={recActions}
+          onGetRecommendation={onGetRecommendation}
+          onAction={onAction}
+          readOnly={readOnly}
+          headerRight={<AskAllButton group={retirementPositions} loading={loadingAllRetirement} setLoading={setLoadingAllRetirement} />}
+        />
+        {/* Profile nudge */}
+        <div className="px-6 py-3 border-t border-white/[0.04] flex items-center gap-2 bg-amber-500/[0.03]">
+          <svg className="w-3.5 h-3.5 text-amber-500/60 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+            <path strokeLinecap="round" strokeLinejoin="round" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+          </svg>
+          <p className="text-xs text-amber-500/60">
+            Add your retirement year and age in your profile to unlock glide path alignment scoring for these accounts.
+          </p>
+        </div>
       </div>
     </div>
   )
