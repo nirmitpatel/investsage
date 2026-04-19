@@ -70,7 +70,50 @@ function Spinner({ small }: { small?: boolean }) {
   )
 }
 
-function RecBadge({ rec }: { rec: any }) {
+function ActionButtons({ snapshotId, currentAction, onAction }: {
+  snapshotId: string | null
+  currentAction?: string
+  onAction: (snapshotId: string, action: 'followed' | 'ignored') => void
+}) {
+  if (!snapshotId) return null
+  if (currentAction === 'followed') {
+    return (
+      <div className="flex items-center gap-1 mt-1.5">
+        <span className="text-[10px] text-emerald-500/70 flex items-center gap-0.5">
+          <svg className="w-2.5 h-2.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
+            <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
+          </svg>
+          Followed
+        </span>
+      </div>
+    )
+  }
+  if (currentAction === 'ignored') {
+    return (
+      <div className="flex items-center gap-1 mt-1.5">
+        <span className="text-[10px] text-gray-600">Ignored</span>
+      </div>
+    )
+  }
+  return (
+    <div className="flex items-center gap-1 mt-1.5">
+      <button
+        onClick={() => onAction(snapshotId, 'followed')}
+        className="text-[10px] px-1.5 py-0.5 rounded border border-emerald-500/20 text-emerald-500/70 hover:bg-emerald-500/10 hover:text-emerald-400 transition"
+      >
+        Followed
+      </button>
+      <button
+        onClick={() => onAction(snapshotId, 'ignored')}
+        className="text-[10px] px-1.5 py-0.5 rounded border border-white/[0.06] text-gray-600 hover:text-gray-400 transition"
+      >
+        Ignored
+      </button>
+    </div>
+  )
+}
+
+function RecBadge({ rec, snapshotId, recAction, onAction }: { rec: any; snapshotId: string | null; recAction?: string; onAction: (id: string, action: 'followed' | 'ignored') => void }) {
   const [open, setOpen] = useState(false)
   const [popoverStyle, setPopoverStyle] = useState<React.CSSProperties>({})
   const btnRef = useRef<HTMLButtonElement>(null)
@@ -113,7 +156,7 @@ function RecBadge({ rec }: { rec: any }) {
   }
 
   return (
-    <div className="inline-flex justify-end" onMouseLeave={handleMouseLeave}>
+    <div className="inline-flex flex-col items-end" onMouseLeave={handleMouseLeave}>
       <button
         ref={btnRef}
         onMouseEnter={handleMouseEnter}
@@ -122,6 +165,7 @@ function RecBadge({ rec }: { rec: any }) {
         {label[rec.recommendation] ?? rec.recommendation}
         {rec.confidence && <span className="opacity-60 font-normal">{rec.confidence[0]}</span>}
       </button>
+      <ActionButtons snapshotId={snapshotId} currentAction={recAction} onAction={onAction} />
       {open && (
         <div
           style={popoverStyle}
@@ -189,12 +233,15 @@ interface Props {
   loadingRec: Record<string, boolean>
   recommendations: Record<string, any>
   recErrors: Record<string, string>
+  snapshotIds?: Record<string, string>
+  recActions?: Record<string, string>
   onGetRecommendation: (symbol: string) => void
+  onAction?: (symbol: string, snapshotId: string, action: 'followed' | 'ignored') => void
   onImportClick: () => void
   readOnly?: boolean
 }
 
-export default function PositionsTable({ positions, loadingRec, recommendations, recErrors, onGetRecommendation, onImportClick, readOnly }: Props) {
+export default function PositionsTable({ positions, loadingRec, recommendations, recErrors, snapshotIds = {}, recActions = {}, onGetRecommendation, onAction, onImportClick, readOnly }: Props) {
   const [loadingAll, setLoadingAll] = useState(false)
   const [tab, setTab] = useState<'all' | 'personal' | 'retirement'>('all')
 
@@ -359,7 +406,12 @@ export default function PositionsTable({ positions, loadingRec, recommendations,
                     {loadingRec[p.symbol] ? (
                       <span className="inline-flex justify-center w-full"><Spinner /></span>
                     ) : recommendations[p.symbol] ? (
-                      <RecBadge rec={recommendations[p.symbol]} />
+                      <RecBadge
+                        rec={recommendations[p.symbol]}
+                        snapshotId={snapshotIds[p.symbol] ?? null}
+                        recAction={recActions[p.symbol]}
+                        onAction={(sid, action) => onAction?.(p.symbol, sid, action)}
+                      />
                     ) : recErrors[p.symbol] ? (
                       <button
                         onClick={() => onGetRecommendation(p.symbol)}

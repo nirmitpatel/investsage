@@ -147,6 +147,57 @@ CREATE TABLE share_tokens (
 --   created_at TIMESTAMP DEFAULT NOW()
 -- );
 
+-- recommendation_outcomes: shadow portfolio checkpoints (30/60/90/180/365 days)
+CREATE TABLE recommendation_outcomes (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  recommendation_id UUID REFERENCES recommendation_snapshots(id) ON DELETE CASCADE,
+  user_id UUID REFERENCES auth.users(id) ON DELETE CASCADE,
+  checkpoint_days INT NOT NULL,          -- 30, 60, 90, 180, 365
+  actual_value DECIMAL(15,4),            -- current position value (0 if SELL was followed)
+  shadow_value DECIMAL(15,4),            -- shares_at_recommendation * price_at_checkpoint
+  price_at_checkpoint DECIMAL(15,4),
+  checked_at TIMESTAMP DEFAULT NOW(),
+  UNIQUE(recommendation_id, checkpoint_days)
+);
+-- Migration (run if schema already applied):
+-- CREATE TABLE IF NOT EXISTS recommendation_outcomes (
+--   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+--   recommendation_id UUID REFERENCES recommendation_snapshots(id) ON DELETE CASCADE,
+--   user_id UUID REFERENCES auth.users(id) ON DELETE CASCADE,
+--   checkpoint_days INT NOT NULL,
+--   actual_value DECIMAL(15,4),
+--   shadow_value DECIMAL(15,4),
+--   price_at_checkpoint DECIMAL(15,4),
+--   checked_at TIMESTAMP DEFAULT NOW(),
+--   UNIQUE(recommendation_id, checkpoint_days)
+-- );
+
+-- ai_training_feedback: outcome correctness for learning loop
+CREATE TABLE ai_training_feedback (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  recommendation_id UUID REFERENCES recommendation_snapshots(id) ON DELETE CASCADE,
+  user_id UUID REFERENCES auth.users(id) ON DELETE CASCADE,
+  outcome_correct BOOLEAN,
+  factor_scores JSONB,                   -- per-factor accuracy post-outcome
+  sector VARCHAR(50),
+  market_condition VARCHAR(50),          -- 'bull', 'bear', 'sideways'
+  created_at TIMESTAMP DEFAULT NOW()
+);
+-- Migration (run if schema already applied):
+-- CREATE TABLE IF NOT EXISTS ai_training_feedback (
+--   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+--   recommendation_id UUID REFERENCES recommendation_snapshots(id) ON DELETE CASCADE,
+--   user_id UUID REFERENCES auth.users(id) ON DELETE CASCADE,
+--   outcome_correct BOOLEAN,
+--   factor_scores JSONB,
+--   sector VARCHAR(50),
+--   market_condition VARCHAR(50),
+--   created_at TIMESTAMP DEFAULT NOW()
+-- );
+
+-- Migration: add shares_at_recommendation to recommendation_snapshots
+-- ALTER TABLE recommendation_snapshots ADD COLUMN IF NOT EXISTS shares_at_recommendation DECIMAL(15,6);
+
 -- ─────────────────────────────────────────
 -- Row Level Security (RLS)
 -- ─────────────────────────────────────────
@@ -155,6 +206,8 @@ ALTER TABLE portfolios ENABLE ROW LEVEL SECURITY;
 ALTER TABLE positions ENABLE ROW LEVEL SECURITY;
 ALTER TABLE tax_lots ENABLE ROW LEVEL SECURITY;
 ALTER TABLE recommendation_snapshots ENABLE ROW LEVEL SECURITY;
+ALTER TABLE recommendation_outcomes ENABLE ROW LEVEL SECURITY;
+ALTER TABLE ai_training_feedback ENABLE ROW LEVEL SECURITY;
 ALTER TABLE portfolio_snapshots ENABLE ROW LEVEL SECURITY;
 ALTER TABLE share_tokens ENABLE ROW LEVEL SECURITY;
 
@@ -173,6 +226,12 @@ CREATE POLICY "Users see own tax lots" ON tax_lots
   FOR ALL USING (auth.uid() = user_id);
 
 CREATE POLICY "Users see own recommendations" ON recommendation_snapshots
+  FOR ALL USING (auth.uid() = user_id);
+
+CREATE POLICY "Users see own recommendation outcomes" ON recommendation_outcomes
+  FOR ALL USING (auth.uid() = user_id);
+
+CREATE POLICY "Users see own ai training feedback" ON ai_training_feedback
   FOR ALL USING (auth.uid() = user_id);
 
 CREATE POLICY "Users see own snapshots" ON portfolio_snapshots
@@ -200,4 +259,7 @@ CREATE INDEX idx_smart_money_symbol ON smart_money_trades(symbol);
 CREATE INDEX idx_smart_money_date ON smart_money_trades(trade_date DESC);
 CREATE INDEX idx_policy_symbols ON policy_events USING GIN(affected_symbols);
 CREATE INDEX idx_snapshots_portfolio_date ON portfolio_snapshots(portfolio_id, snapshot_date DESC);
+CREATE INDEX idx_rec_snapshots_user ON recommendation_snapshots(user_id, snapshot_date DESC);
+CREATE INDEX idx_rec_outcomes_rec ON recommendation_outcomes(recommendation_id);
+CREATE INDEX idx_rec_outcomes_user ON recommendation_outcomes(user_id);
 CREATE INDEX idx_share_tokens_token ON share_tokens(token);

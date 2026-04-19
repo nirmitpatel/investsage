@@ -169,6 +169,244 @@ def get_user_share_tokens(portfolio_id: str) -> List[Dict[str, Any]]:
     return result.data or []
 
 
+def save_recommendation_snapshot(
+    user_id: str,
+    symbol: str,
+    result: Dict[str, Any],
+    position: Dict[str, Any],
+) -> Optional[str]:
+    """Persist a recommendation to recommendation_snapshots. Returns the new row id."""
+    from datetime import date as _date
+    factor_scores = result.get("factor_scores") or {}
+    combined_score: Optional[float] = None
+    if factor_scores:
+        vals = [v for v in factor_scores.values() if isinstance(v, (int, float))]
+        if vals:
+            combined_score = round(sum(vals) / len(vals), 2)
+    try:
+        row = get_supabase().table("recommendation_snapshots").insert({
+            "user_id": user_id,
+            "symbol": symbol,
+            "recommendation_type": result.get("recommendation"),
+            "confidence": result.get("confidence"),
+            "reasoning": result.get("reasoning"),
+            "snapshot_date": _date.today().isoformat(),
+            "price_at_recommendation": position.get("current_price"),
+            "shares_at_recommendation": position.get("total_shares"),
+            "value_at_recommendation": position.get("current_value"),
+            "factors_at_time": factor_scores or None,
+            "combined_score": combined_score,
+            "user_action": "pending",
+        }).execute()
+        return row.data[0]["id"] if row.data else None
+    except Exception:
+        return None
+
+
+def update_recommendation_action(snapshot_id: str, user_id: str, action: str) -> bool:
+    """Mark a recommendation as 'followed' or 'ignored'."""
+    if action not in ("followed", "ignored", "pending"):
+        return False
+    result = get_supabase().table("recommendation_snapshots").update(
+        {"user_action": action}
+    ).eq("id", snapshot_id).eq("user_id", user_id).execute()
+    return bool(result.data)
+
+
+def get_recommendation_snapshots(user_id: str, limit: int = 100) -> List[Dict[str, Any]]:
+    """Return user's recommendation history, newest first."""
+    result = (
+        get_supabase()
+        .table("recommendation_snapshots")
+        .select("*")
+        .eq("user_id", user_id)
+        .order("snapshot_date", desc=True)
+        .limit(limit)
+        .execute()
+    )
+    return result.data or []
+
+
+def track_recommendation_outcomes(
+    user_id: str, positions: List[Dict[str, Any]]
+) -> None:
+    """Upsert recommendation_outcomes for all due checkpoints."""
+    import yfinance as yf
+    from datetime import date as _date, timedelta
+
+    snapshots = get_recommendation_snapshots(user_id, limit=200)
+    if not snapshots:
+        return
+
+    today = _date.today()
+    CHECKPOINTS = [30, 60, 90, 180, 365]
+
+    # Fetch existing outcomes to avoid redundant work
+    existing = (
+        get_supabase()
+        .table("recommendation_outcomes")
+        .select("recommendation_id,checkpoint_days")
+        .eq("user_id", user_id)
+        .execute()
+    )
+    done: set = {
+        (r["recommendation_id"], r["checkpoint_days"])
+        for r in (existing.data or [])
+    }
+
+    # Current position value by symbol (for actual_value computation)
+    pos_value: Dict[str, float] = {
+        p["symbol"]: (p.get("current_value") or 0) for p in positions
+    }
+
+    # Gather symbols needing price fetch
+    due_rows = []
+    for snap in snapshots:
+        snap_date = _date.fromisoformat(str(snap["snapshot_date"])[:10])
+        shares = snap.get("shares_at_recommendation")
+        if not shares:
+            continue
+        for cp in CHECKPOINTS:
+            if (snap["id"], cp) in done:
+                continue
+            if (today - snap_date).days >= cp:
+                due_rows.append((snap, cp))
+
+    if not due_rows:
+        return
+
+    # Batch-fetch current prices for all due symbols
+    symbols_needed = list({snap["symbol"] for snap, _ in due_rows})
+    prices: Dict[str, Optional[float]] = {}
+    try:
+        tickers = yf.download(
+            symbols_needed, period="1d", auto_adjust=True, progress=False
+        )
+        close = tickers["Close"] if "Close" in tickers else tickers
+        for sym in symbols_needed:
+            try:
+                val = close[sym].dropna().iloc[-1] if sym in close else None
+                prices[sym] = float(val) if val is not None else None
+            except Exception:
+                prices[sym] = None
+    except Exception:
+        for sym in symbols_needed:
+            prices[sym] = None
+
+    # Build outcome rows
+    rows = []
+    for snap, cp in due_rows:
+        sym = snap["symbol"]
+        current_price = prices.get(sym)
+        if current_price is None:
+            continue
+        shares = float(snap.get("shares_at_recommendation") or 0)
+        shadow_value = round(shares * current_price, 4)
+        # actual_value: 0 if followed a SELL, else current position value
+        if snap.get("user_action") == "followed" and snap.get("recommendation_type") == "SELL":
+            actual_value = 0.0
+        else:
+            actual_value = round(pos_value.get(sym) or 0, 4)
+        rows.append({
+            "recommendation_id": snap["id"],
+            "user_id": user_id,
+            "checkpoint_days": cp,
+            "actual_value": actual_value,
+            "shadow_value": shadow_value,
+            "price_at_checkpoint": round(current_price, 4),
+        })
+
+    if rows:
+        get_supabase().table("recommendation_outcomes").upsert(
+            rows, on_conflict="recommendation_id,checkpoint_days"
+        ).execute()
+
+
+def get_value_stats(user_id: str, positions: List[Dict[str, Any]]) -> Dict[str, Any]:
+    """Aggregate recommendation history into value dashboard stats."""
+    snapshots = get_recommendation_snapshots(user_id, limit=200)
+    outcomes_res = (
+        get_supabase()
+        .table("recommendation_outcomes")
+        .select("*")
+        .eq("user_id", user_id)
+        .execute()
+    )
+    outcomes_by_rec: Dict[str, List[Dict[str, Any]]] = {}
+    for o in (outcomes_res.data or []):
+        outcomes_by_rec.setdefault(o["recommendation_id"], []).append(o)
+
+    pos_value: Dict[str, float] = {
+        p["symbol"]: (p.get("current_value") or 0) for p in positions
+    }
+    pos_price: Dict[str, Optional[float]] = {
+        p["symbol"]: p.get("current_price") for p in positions
+    }
+
+    followed, ignored, pending = 0, 0, 0
+    total_value_impact = 0.0  # sum of (value_at_rec - shadow_now) for followed SELLs
+    summary_rows = []
+
+    for snap in snapshots:
+        action = snap.get("user_action", "pending")
+        rec_type = snap.get("recommendation_type", "")
+        if action == "followed":
+            followed += 1
+        elif action == "ignored":
+            ignored += 1
+        else:
+            pending += 1
+
+        # Compute value impact from most recent outcome
+        snap_outcomes = sorted(
+            outcomes_by_rec.get(snap["id"], []),
+            key=lambda x: x["checkpoint_days"],
+            reverse=True,
+        )
+        value_impact: Optional[float] = None
+        checkpoint_days: Optional[int] = None
+        if snap_outcomes:
+            o = snap_outcomes[0]
+            shadow = o.get("shadow_value") or 0
+            actual = o.get("actual_value") or 0
+            checkpoint_days = o.get("checkpoint_days")
+            if action == "followed" and rec_type == "SELL":
+                # value_protected = what position is worth now vs what you sold for
+                value_impact = round((snap.get("value_at_recommendation") or 0) - shadow, 2)
+                total_value_impact += value_impact
+            else:
+                # gain/loss vs value at recommendation date
+                value_impact = round(actual - (snap.get("value_at_recommendation") or 0), 2)
+
+        # Current price from live positions or checkpoint
+        current_price = pos_price.get(snap["symbol"])
+        if current_price is None and snap_outcomes:
+            current_price = snap_outcomes[0].get("price_at_checkpoint")
+
+        summary_rows.append({
+            "id": snap["id"],
+            "symbol": snap["symbol"],
+            "recommendation_type": rec_type,
+            "confidence": snap.get("confidence"),
+            "user_action": action,
+            "snapshot_date": snap.get("snapshot_date"),
+            "price_at_recommendation": snap.get("price_at_recommendation"),
+            "current_price": current_price,
+            "value_at_recommendation": snap.get("value_at_recommendation"),
+            "value_impact": value_impact,
+            "checkpoint_days": checkpoint_days,
+        })
+
+    return {
+        "total_recommendations": len(snapshots),
+        "followed_count": followed,
+        "ignored_count": ignored,
+        "pending_count": pending,
+        "total_value_impact": round(total_value_impact, 2),
+        "recommendations": summary_rows,
+    }
+
+
 def patch_positions_cost_basis(portfolio_id: str, updates: List[Dict[str, Any]]) -> None:
     """Update cost basis and gain/loss fields for existing positions by symbol."""
     sb = get_supabase()

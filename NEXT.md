@@ -15,11 +15,6 @@ _Say "execute next" to run the top unchecked item. Completed tasks are auto-stri
 ### Execution Plan Generator (Feature 3B — not started)
 
 ### Portfolio Simulation and Before/After Tracker (Feature 3C — not started)
-- [ ] **Schema: recommendation_outcomes + ai_training_feedback** — add two missing tables from design: `recommendation_outcomes` (tracks actual vs shadow portfolio value at 30/60/90/180/365 day intervals) and `ai_training_feedback` (records outcome correctness, factor scores, sector, market condition for AI learning loop)
-- [ ] **Persist AI recommendations** — write to `recommendation_snapshots` on every `/recommend` call; include `price_at_recommendation`, `shares_at_recommendation`, `value_at_recommendation`, `factors_at_time`, `combined_score`
-- [ ] **Shadow portfolio tracking** — on each recommendation, snapshot position; at 30/60/90/180/365 day checkpoints, compare actual portfolio vs simulated "did nothing" path; `track_recommendation_outcome()` algorithm fully specified in design
-- [ ] **Value dashboard** — UI showing: recommendations followed (count, $ gained vs shadow, tax savings captured), recommendations ignored (missed opportunity framing), lifetime value summary (total $ InvestIQ added vs subscription cost)
-- [ ] **Recommendation follow-through UI** — let user mark a recommendation as "followed" or "ignored" on the dashboard; drives shadow portfolio comparison
 
 ### Smart Money & Congressional Trades (Feature 4 — not started)
 - [ ] **Ingest congressional trades** — fetch STOCK Act disclosures from Capitol Trades API or Senate EFTS; daily scan; populate `smart_money_trades` with `trader_type='congress'`, party/state/committee in `trader_detail`; normalize symbols

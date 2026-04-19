@@ -5,9 +5,12 @@ AI analysis endpoints.
 import asyncio
 from concurrent.futures import ThreadPoolExecutor
 from datetime import date
-from fastapi import APIRouter, HTTPException, Depends
+from fastapi import APIRouter, HTTPException, Depends, Body
 
-from services.db.supabase_client import get_or_create_portfolio, get_positions, get_tax_lots
+from services.db.supabase_client import (
+    get_or_create_portfolio, get_positions, get_tax_lots,
+    save_recommendation_snapshot, update_recommendation_action,
+)
 from services.purchase_pattern import analyze_purchase_pattern
 from services.market_data.yfinance_client import fetch_prices, fetch_price_performance
 from services.health_score import calculate_health_score, build_effective_sector_values, check_symbol_portfolio_fit
@@ -230,7 +233,31 @@ async def recommend_position(symbol: str, user_id: str = Depends(get_current_use
     """Get a Sell/Hold/Buy recommendation for a specific position."""
     portfolio = get_or_create_portfolio(user_id)
     positions = get_positions(portfolio["id"])
-    if not any(p["symbol"] == symbol for p in positions):
+    position = next((p for p in positions if p["symbol"] == symbol), None)
+    if not position:
         raise HTTPException(status_code=404, detail=f"Position {symbol} not found")
     result = await asyncio.to_thread(_recommend_sync, symbol, portfolio, positions)
+    # Persist snapshot and include id in response
+    if result.get("recommendation") and position:
+        snapshot_id = await asyncio.to_thread(
+            save_recommendation_snapshot, user_id, symbol, result, position
+        )
+        if snapshot_id:
+            result["snapshot_id"] = snapshot_id
     return result
+
+
+@router.patch("/position/{symbol}/action")
+async def set_recommendation_action(
+    symbol: str,
+    snapshot_id: str = Body(..., embed=True),
+    action: str = Body(..., embed=True),
+    user_id: str = Depends(get_current_user),
+):
+    """Mark a recommendation snapshot as 'followed' or 'ignored'."""
+    if action not in ("followed", "ignored", "pending"):
+        raise HTTPException(status_code=400, detail="action must be followed, ignored, or pending")
+    updated = await asyncio.to_thread(update_recommendation_action, snapshot_id, user_id, action)
+    if not updated:
+        raise HTTPException(status_code=404, detail="Snapshot not found")
+    return {"ok": True}

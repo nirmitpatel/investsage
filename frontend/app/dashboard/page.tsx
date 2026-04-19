@@ -263,6 +263,8 @@ export default function Dashboard() {
   const [recommendations, setRecommendations] = useState<Record<string, any>>({})
   const [loadingRec, setLoadingRec] = useState<Record<string, boolean>>({})
   const [recErrors, setRecErrors] = useState<Record<string, string>>({})
+  const [snapshotIds, setSnapshotIds] = useState<Record<string, string>>({})
+  const [recActions, setRecActions] = useState<Record<string, string>>({})
   const [showShareModal, setShowShareModal] = useState(false)
   const [shareToken, setShareToken] = useState<string | null>(null)
   const [shareLoading, setShareLoading] = useState(false)
@@ -327,6 +329,7 @@ export default function Dashboard() {
       if (res.ok) {
         const data = await res.json()
         setRecommendations(r => ({ ...r, [symbol]: data }))
+        if (data.snapshot_id) setSnapshotIds(s => ({ ...s, [symbol]: data.snapshot_id }))
       } else {
         const err = await res.json().catch(() => ({}))
         setRecErrors(e => ({ ...e, [symbol]: err.detail ?? 'Sage request failed' }))
@@ -484,6 +487,17 @@ export default function Dashboard() {
     navigator.clipboard.writeText(url)
     setShareCopied(true)
     setTimeout(() => setShareCopied(false), 2000)
+  }
+
+  async function handleAction(symbol: string, snapshotId: string, action: 'followed' | 'ignored') {
+    setRecActions(a => ({ ...a, [symbol]: action }))
+    const token = await getToken()
+    if (!token) return
+    await fetch(`${API}/api/v1/ai/position/${symbol}/action`, {
+      method: 'PATCH',
+      headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ snapshot_id: snapshotId, action }),
+    })
   }
 
   async function handleSignOut() {
@@ -838,7 +852,10 @@ export default function Dashboard() {
               loadingRec={loadingRec}
               recommendations={recommendations}
               recErrors={recErrors}
+              snapshotIds={snapshotIds}
+              recActions={recActions}
               onGetRecommendation={handleGetRecommendation}
+              onAction={handleAction}
               onImportClick={() => setShowImport(true)}
             />
           )}
