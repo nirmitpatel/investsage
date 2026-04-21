@@ -407,6 +407,90 @@ def get_value_stats(user_id: str, positions: List[Dict[str, Any]]) -> Dict[str, 
     }
 
 
+def get_smart_money_trades(
+    trader_type: Optional[str] = None,
+    limit: int = 100,
+    days_back: int = 90,
+) -> List[Dict[str, Any]]:
+    from datetime import date, timedelta
+    sb = get_supabase()
+    cutoff = (date.today() - timedelta(days=days_back)).isoformat()
+    q = sb.table("smart_money_trades").select("*").gte("disclosure_date", cutoff).order("disclosure_date", desc=True).limit(limit)
+    if trader_type:
+        q = q.eq("trader_type", trader_type)
+    return q.execute().data or []
+
+
+def get_smart_money_overlap(symbols: List[str], days_back: int = 90) -> List[Dict[str, Any]]:
+    from datetime import date, timedelta
+    if not symbols:
+        return []
+    sb = get_supabase()
+    cutoff = (date.today() - timedelta(days=days_back)).isoformat()
+    result = (
+        sb.table("smart_money_trades")
+        .select("*")
+        .in_("symbol", symbols)
+        .gte("disclosure_date", cutoff)
+        .order("disclosure_date", desc=True)
+        .limit(200)
+        .execute()
+    )
+    return result.data or []
+
+
+def upsert_smart_money_trades(trades: List[Dict[str, Any]], trader_type: str) -> int:
+    """Delete recent records for trader_type then bulk-insert fresh batch. Returns count inserted."""
+    from datetime import date, timedelta
+    if not trades:
+        return 0
+    sb = get_supabase()
+    cutoff = (date.today() - timedelta(days=95)).isoformat()
+    sb.table("smart_money_trades").delete().eq("trader_type", trader_type).gte("disclosure_date", cutoff).execute()
+    sb.table("smart_money_trades").insert(trades).execute()
+    return len(trades)
+
+
+def get_trade_by_id(trade_id: str) -> Optional[Dict[str, Any]]:
+    result = get_supabase().table("smart_money_trades").select("*").eq("id", trade_id).limit(1).execute()
+    return result.data[0] if result.data else None
+
+
+def get_smart_money_follows(user_id: str) -> List[Dict[str, Any]]:
+    result = (
+        get_supabase()
+        .table("smart_money_follows")
+        .select("*")
+        .eq("user_id", user_id)
+        .order("created_at", desc=True)
+        .execute()
+    )
+    return result.data or []
+
+
+def follow_trader(user_id: str, trader_name: str, trader_type: str) -> bool:
+    try:
+        get_supabase().table("smart_money_follows").upsert(
+            {"user_id": user_id, "trader_name": trader_name, "trader_type": trader_type},
+            on_conflict="user_id,trader_name",
+        ).execute()
+        return True
+    except Exception:
+        return False
+
+
+def unfollow_trader(user_id: str, trader_name: str) -> bool:
+    result = (
+        get_supabase()
+        .table("smart_money_follows")
+        .delete()
+        .eq("user_id", user_id)
+        .eq("trader_name", trader_name)
+        .execute()
+    )
+    return bool(result.data)
+
+
 def patch_positions_cost_basis(portfolio_id: str, updates: List[Dict[str, Any]]) -> None:
     """Update cost basis and gain/loss fields for existing positions by symbol."""
     sb = get_supabase()

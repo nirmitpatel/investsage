@@ -2,7 +2,7 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from config import settings
-from api import health, portfolio, tax, ai, analytics, share, analysis, value
+from api import health, portfolio, tax, ai, analytics, share, analysis, value, smart_money
 from services.price_refresh import price_refresh_loop
 import asyncio
 
@@ -32,3 +32,4 @@ app.include_router(analytics.router, prefix="/api/v1/analytics", tags=["analytic
 app.include_router(share.router, prefix="/api/v1/share", tags=["share"])
 app.include_router(analysis.router, prefix="/api/v1/analysis", tags=["analysis"])
 app.include_router(value.router, prefix="/api/v1/value", tags=["value"])
+app.include_router(smart_money.router, prefix="/api/v1/smart-money", tags=["smart-money"])

@@ -52,6 +52,109 @@ interface Health {
   }
 }
 
+interface OverlapTrade {
+  id: string
+  trader_type: string
+  trader_name: string
+  trader_detail: Record<string, unknown>
+  symbol: string
+  trade_type: string
+  trade_date: string | null
+  disclosure_date: string | null
+  amount_range: string | null
+}
+
+function SmartMoneyOverlapCard() {
+  const router = useRouter()
+  const [trades, setTrades] = useState<OverlapTrade[]>([])
+  const [loaded, setLoaded] = useState(false)
+
+  useEffect(() => {
+    async function load() {
+      const token = (await createClient().auth.getSession()).data.session?.access_token
+      if (!token) return
+      try {
+        const res = await fetch(`${API}/api/v1/smart-money/overlap?days_back=30`, {
+          headers: { Authorization: `Bearer ${token}` },
+        })
+        if (res.ok) {
+          const data = await res.json()
+          setTrades((data.trades ?? []).slice(0, 5))
+        }
+      } catch { /* non-critical */ }
+      setLoaded(true)
+    }
+    load()
+  }, [])
+
+  if (!loaded || trades.length === 0) return null
+
+  const traderBadge = (type: string) => {
+    if (type === 'congress') return 'bg-blue-500/15 text-blue-300 border-blue-500/20'
+    if (type === 'hedge_fund') return 'bg-violet-500/15 text-violet-300 border-violet-500/20'
+    return 'bg-amber-500/15 text-amber-300 border-amber-500/20'
+  }
+  const traderLabel = (type: string) => {
+    if (type === 'congress') return 'Congress'
+    if (type === 'hedge_fund') return 'Hedge Fund'
+    return 'Insider'
+  }
+
+  return (
+    <div className="bg-white/[0.03] border border-violet-500/20 rounded-2xl p-6">
+      <div className="flex items-center justify-between mb-4">
+        <h2 className="font-semibold flex items-center gap-2">
+          <svg className="w-4 h-4 text-violet-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+            <path strokeLinecap="round" strokeLinejoin="round" d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6" />
+          </svg>
+          Smart Money in Your Holdings
+        </h2>
+        <button
+          onClick={() => router.push('/smart-money')}
+          className="text-xs text-violet-400 hover:text-violet-300 transition"
+        >
+          View all →
+        </button>
+      </div>
+      <p className="text-xs text-gray-500 mb-4">Congress members, hedge funds, or insiders have recently traded positions you hold.</p>
+      <div className="space-y-2">
+        {trades.map(t => {
+          const detail = t.trader_detail || {}
+          const subtext = t.trader_type === 'congress'
+            ? [(detail.party as string), (detail.state as string), (detail.chamber as string)].filter(Boolean).join(' · ')
+            : t.trader_type === 'insider'
+            ? (detail.title as string) || ''
+            : (detail.fund_name as string) || ''
+          return (
+            <div key={t.id} className="flex items-center gap-3 bg-white/[0.02] border border-white/[0.05] rounded-xl px-3 py-2.5">
+              <div className="flex-1 min-w-0">
+                <div className="flex items-center gap-2">
+                  <span className="text-sm font-medium">{t.trader_name}</span>
+                  <span className={`text-[10px] font-semibold px-1.5 py-0.5 rounded-full border ${traderBadge(t.trader_type)}`}>
+                    {traderLabel(t.trader_type)}
+                  </span>
+                </div>
+                {subtext && <p className="text-xs text-gray-600 mt-0.5">{subtext}</p>}
+              </div>
+              <div className="flex items-center gap-2 shrink-0">
+                <span className="text-sm font-bold">{t.symbol}</span>
+                <span className={`text-xs px-2 py-0.5 rounded-md font-medium capitalize ${
+                  (t.trade_type || '').toLowerCase() === 'buy'
+                    ? 'bg-emerald-500/15 text-emerald-300'
+                    : 'bg-red-500/15 text-red-300'
+                }`}>
+                  {t.trade_type || '—'}
+                </span>
+                {t.amount_range && <span className="text-xs text-gray-500 hidden sm:block">{t.amount_range}</span>}
+              </div>
+            </div>
+          )
+        })}
+      </div>
+    </div>
+  )
+}
+
 const STYLE_CONFIG = {
   play_it_safe: { label: 'Play it safe', emoji: '🛡️', desc: 'Conservative — capital preservation, 3-year stability focus', color: 'text-blue-300', bg: 'bg-blue-500/10 border-blue-500/30' },
   beat_the_market: { label: 'Beat the market', emoji: '⚡', desc: 'Aggressive — outperform the S&P 500', color: 'text-violet-300', bg: 'bg-violet-500/10 border-violet-500/30' },
@@ -275,6 +378,7 @@ export default function Dashboard() {
   const pdfRef = useRef<HTMLInputElement>(null)
 
   useEffect(() => { loadPortfolio() }, [])
+
 
   useEffect(() => {
     if (uploading !== 'positions') { setUploadStep(''); return }
@@ -762,6 +866,9 @@ export default function Dashboard() {
               </div>
             </div>
           )}
+
+          {/* Smart Money Overlap Alert */}
+          {positions.length > 0 && <SmartMoneyOverlapCard />}
 
           {/* Sector Breakdown */}
           {health?.sector_breakdown && health.sector_breakdown.length > 0 && (

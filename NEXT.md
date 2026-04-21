@@ -17,12 +17,6 @@ _Say "execute next" to run the top unchecked item. Completed tasks are auto-stri
 ### Portfolio Simulation and Before/After Tracker (Feature 3C — not started)
 
 ### Smart Money & Congressional Trades (Feature 4 — not started)
-- [ ] **Ingest congressional trades** — fetch STOCK Act disclosures from Capitol Trades API or Senate EFTS; daily scan; populate `smart_money_trades` with `trader_type='congress'`, party/state/committee in `trader_detail`; normalize symbols
-- [ ] **Ingest hedge fund 13F filings** — fetch quarterly SEC EDGAR XBRL filings for top 20 funds; parse position changes quarter over quarter; populate `smart_money_trades` with `trader_type='hedge_fund'`
-- [ ] **Ingest insider transactions (Form 4)** — fetch executive buy/sell via SEC EDGAR API within 2 business days; populate `smart_money_trades` with `trader_type='insider'`
-- [ ] **Backend: smart money routes** — `GET /api/v1/smart-money/congress`, `/hedge-funds`, `/overlap` (trades matching user's held symbols), `/follow`, `POST /follow/{id}`, `DELETE /follow/{id}`
-- [ ] **Dashboard: smart money overlap alert** — surface a card when congress members or insiders have recently traded positions the user holds; show trader name, party/committee, trade date, amount range, disclosure lag
-- [ ] **Smart Money page** — dedicated page listing all trades for held symbols; filterable by trader type, buy/sell, recency; link to original disclosure source; follow feature for specific politicians or fund managers
 
 ### Policy Impact Alerts (Feature 5 — not started)
 - [ ] **Policy-stock mapping database** — hardcode initial `POLICY_IMPACTS` dict per design (CHIPS Act → NVDA/AMD/INTC, IRA Drug Pricing → LLY/NVO/MRK, Defense Auth → PLTR/AXON/LMT, etc.); `check_policy_impact()` algorithm specified

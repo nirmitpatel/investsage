@@ -198,6 +198,25 @@ CREATE TABLE ai_training_feedback (
 -- Migration: add shares_at_recommendation to recommendation_snapshots
 -- ALTER TABLE recommendation_snapshots ADD COLUMN IF NOT EXISTS shares_at_recommendation DECIMAL(15,6);
 
+-- smart_money_follows: per-user trader follow list
+CREATE TABLE smart_money_follows (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  user_id UUID REFERENCES auth.users(id) ON DELETE CASCADE,
+  trader_name VARCHAR(255) NOT NULL,
+  trader_type VARCHAR(20) NOT NULL,
+  created_at TIMESTAMP DEFAULT NOW(),
+  UNIQUE(user_id, trader_name)
+);
+-- Migration (run if schema already applied):
+-- CREATE TABLE IF NOT EXISTS smart_money_follows (
+--   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+--   user_id UUID REFERENCES auth.users(id) ON DELETE CASCADE,
+--   trader_name VARCHAR(255) NOT NULL,
+--   trader_type VARCHAR(20) NOT NULL,
+--   created_at TIMESTAMP DEFAULT NOW(),
+--   UNIQUE(user_id, trader_name)
+-- );
+
 -- ─────────────────────────────────────────
 -- Row Level Security (RLS)
 -- ─────────────────────────────────────────
@@ -247,6 +266,10 @@ CREATE POLICY "Authenticated users read smart money" ON smart_money_trades
 CREATE POLICY "Authenticated users read policy events" ON policy_events
   FOR SELECT USING (auth.role() = 'authenticated');
 
+ALTER TABLE smart_money_follows ENABLE ROW LEVEL SECURITY;
+CREATE POLICY "Users manage own follows" ON smart_money_follows
+  FOR ALL USING (auth.uid() = user_id);
+
 -- ─────────────────────────────────────────
 -- Indexes
 -- ─────────────────────────────────────────
@@ -263,3 +286,4 @@ CREATE INDEX idx_rec_snapshots_user ON recommendation_snapshots(user_id, snapsho
 CREATE INDEX idx_rec_outcomes_rec ON recommendation_outcomes(recommendation_id);
 CREATE INDEX idx_rec_outcomes_user ON recommendation_outcomes(user_id);
 CREATE INDEX idx_share_tokens_token ON share_tokens(token);
+CREATE INDEX idx_follows_user ON smart_money_follows(user_id);
