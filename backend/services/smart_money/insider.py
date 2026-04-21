@@ -121,7 +121,8 @@ def fetch_insider_trades(days_back: int = 7) -> List[Dict[str, Any]]:
         source = hit.get("_source", {})
         accession = source.get("accession_no", "").replace("-", "")
         entity_name = source.get("entity_name", "")
-        cik = hit.get("_id", "").split(":")[0] if ":" in hit.get("_id", "") else ""
+        _id = hit.get("_id", "")
+        cik = source.get("entity_id", "") or (_id.split("/")[2] if _id.count("/") >= 2 else "")
 
         if not accession or not cik:
             continue

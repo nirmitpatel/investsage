@@ -260,9 +260,9 @@ export default function SmartMoneyPage() {
     setIngesting(true)
     setIngestMsg('')
     const token = await getToken()
-    if (!token) return
+    if (!token) { setIngesting(false); return }
     try {
-      const source = tab === 'overlap' ? 'congress' : tab === 'hedge_fund' ? 'hedge_funds' : tab
+      const source = 'all'
       const res = await fetch(`${API}/api/v1/smart-money/ingest?source=${source}`, {
         method: 'POST',
         headers: { Authorization: `Bearer ${token}` },
