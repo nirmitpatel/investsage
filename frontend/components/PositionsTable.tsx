@@ -1,6 +1,6 @@
 'use client'
 
-import { Fragment, useState, useEffect } from 'react'
+import { Fragment, useState, useEffect, useRef, useCallback, type CSSProperties } from 'react'
 
 export interface Position {
   symbol: string
@@ -127,10 +127,73 @@ const REC_LABEL: Record<string, string> = {
 
 function RecBadge({ rec }: { rec: any }) {
   const color = REC_COLORS[rec.recommendation] ?? 'bg-gray-500/15 text-gray-400 border-gray-500/30'
+  const [visible, setVisible] = useState(false)
+  const [popoverStyle, setPopoverStyle] = useState<CSSProperties>({})
+  const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const btnRef = useRef<HTMLButtonElement>(null)
+
+  const openPopover = useCallback(() => {
+    if (!btnRef.current) return
+    const rect = btnRef.current.getBoundingClientRect()
+    const popoverWidth = 280
+    const popoverHeight = 160 // conservative estimate
+    const viewportH = window.innerHeight
+    const viewportW = window.innerWidth
+
+    let top = rect.bottom + 6
+    if (top + popoverHeight > viewportH - 8) {
+      top = rect.top - popoverHeight - 6
+    }
+    let left = rect.left
+    if (left + popoverWidth > viewportW - 8) {
+      left = viewportW - popoverWidth - 8
+    }
+    setPopoverStyle({ position: 'fixed', top, left, width: popoverWidth, zIndex: 9999 })
+    setVisible(true)
+  }, [])
+
+  const handleMouseEnter = useCallback(() => {
+    timerRef.current = setTimeout(openPopover, 150)
+  }, [openPopover])
+
+  const handleMouseLeave = useCallback(() => {
+    if (timerRef.current) clearTimeout(timerRef.current)
+    setVisible(false)
+  }, [])
+
   return (
-    <span className={`inline-flex items-center gap-1 text-xs font-semibold px-2.5 py-1 rounded-lg border ${color}`}>
-      {REC_LABEL[rec.recommendation] ?? rec.recommendation}
-      {rec.confidence && <span className="opacity-60 font-normal">{rec.confidence[0]}</span>}
+    <span className="relative inline-flex">
+      <button
+        ref={btnRef}
+        onMouseEnter={handleMouseEnter}
+        onMouseLeave={handleMouseLeave}
+        className={`inline-flex items-center gap-1 text-xs font-semibold px-2.5 py-1 rounded-lg border cursor-default ${color}`}
+      >
+        {REC_LABEL[rec.recommendation] ?? rec.recommendation}
+        {rec.confidence && <span className="opacity-60 font-normal">{rec.confidence[0]}</span>}
+      </button>
+      {visible && (
+        <div
+          style={popoverStyle}
+          className="rounded-xl border border-white/[0.08] bg-[#13131f] shadow-xl p-4 space-y-3"
+          onMouseEnter={() => { if (timerRef.current) clearTimeout(timerRef.current); setVisible(true) }}
+          onMouseLeave={() => setVisible(false)}
+        >
+          {rec.reasoning && (
+            <p className="text-xs text-gray-300 leading-relaxed">{rec.reasoning}</p>
+          )}
+          {rec.key_factors?.length > 0 && (
+            <div className="space-y-1">
+              {rec.key_factors.map((f: string, i: number) => (
+                <div key={i} className="flex gap-2 text-xs text-gray-500">
+                  <span className="text-gray-700 shrink-0">·</span>
+                  <span>{f}</span>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
     </span>
   )
 }
