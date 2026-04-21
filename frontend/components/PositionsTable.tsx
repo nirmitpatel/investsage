@@ -244,7 +244,7 @@ function AnalysisContent({
   )
 }
 
-// ── Option B: Side Drawer (desktop) ─────────────────────────────────────────
+// ── Option B: Side Drawer (desktop, fixed overlay) ──────────────────────────
 
 interface DrawerProps {
   symbol: string
@@ -265,8 +265,8 @@ function DrawerPanel({
   snapshotId, recAction, onAction, onGetRecommendation, onClose, isRetirement,
 }: DrawerProps) {
   return (
-    <div className="bg-[#0d0d14] border border-white/[0.08] rounded-2xl overflow-hidden sticky top-6">
-      <div className="flex items-center justify-between px-5 py-4 border-b border-white/[0.06]">
+    <div className="flex flex-col h-full">
+      <div className="flex items-center justify-between px-5 py-4 border-b border-white/[0.06] shrink-0">
         <div className="flex items-center gap-3">
           <div className={`w-9 h-9 rounded-xl flex items-center justify-center text-xs font-bold shrink-0 ${
             isRetirement
@@ -289,7 +289,7 @@ function DrawerPanel({
           </svg>
         </button>
       </div>
-      <div className="p-5">
+      <div className="flex-1 overflow-y-auto p-5">
         <AnalysisContent
           symbol={symbol}
           recommendation={recommendation}
@@ -665,23 +665,6 @@ export default function PositionsTable({
     )
   }
 
-  // Desktop drawer element
-  const drawerEl = drawerOpen && selectedPosition ? (
-    <DrawerPanel
-      symbol={selectedSymbol!}
-      position={selectedPosition}
-      recommendation={recommendations[selectedSymbol!]}
-      loading={!!loadingRec[selectedSymbol!]}
-      error={recErrors[selectedSymbol!]}
-      snapshotId={snapshotIds[selectedSymbol!]}
-      recAction={recActions[selectedSymbol!]}
-      onAction={(sid, action) => onAction?.(selectedSymbol!, sid, action)}
-      onGetRecommendation={onGetRecommendation}
-      onClose={() => setSelectedSymbol(null)}
-      isRetirement={isSelectedRetirement}
-    />
-  ) : null
-
   // Shared section props
   const sharedSectionProps = {
     recommendations, loadingRec, recErrors, snapshotIds, recActions,
@@ -689,7 +672,7 @@ export default function PositionsTable({
     readOnly, isMobile,
   }
 
-  // The section cards (left column on desktop, full-width on mobile)
+  // The section cards (always full-width)
   const sectionCards = !hasBoth ? (
     <div className="bg-white/[0.03] border border-white/[0.08] rounded-2xl overflow-hidden">
       <div className="px-6 py-5 border-b border-white/[0.06] flex items-center justify-between">
@@ -751,26 +734,41 @@ export default function PositionsTable({
     return sectionCards
   }
 
-  // Desktop: grid with side drawer
+  // Desktop: full-width table + fixed overlay drawer
   return (
-    <div
-      style={{
-        display: 'grid',
-        gridTemplateColumns: drawerOpen ? '1fr 380px' : '1fr 0px',
-        gap: drawerOpen ? '16px' : '0px',
-        transition: 'grid-template-columns 0.25s cubic-bezier(.4,0,.2,1), gap 0.25s',
-        alignItems: 'start',
-      }}
-    >
-      <div className="min-w-0">{sectionCards}</div>
-      <div style={{ overflow: 'hidden' }}>
-        <div
-          style={{ width: '380px' }}
-          className={`transition-all duration-200 ${drawerOpen ? 'opacity-100 translate-x-0' : 'opacity-0 translate-x-5 pointer-events-none'}`}
-        >
-          {drawerEl}
-        </div>
+    <>
+      {sectionCards}
+
+      {/* Backdrop — click to close */}
+      <div
+        className={`fixed inset-0 z-40 bg-black/40 backdrop-blur-[2px] transition-opacity duration-300 ${
+          drawerOpen ? 'opacity-100 pointer-events-auto' : 'opacity-0 pointer-events-none'
+        }`}
+        onClick={() => setSelectedSymbol(null)}
+      />
+
+      {/* Fixed slide-in panel */}
+      <div
+        className={`fixed inset-y-0 right-0 z-50 w-[420px] bg-[#0d0d14] border-l border-white/[0.08] shadow-2xl shadow-black/60 transition-transform duration-300 ease-[cubic-bezier(.4,0,.2,1)] ${
+          drawerOpen ? 'translate-x-0' : 'translate-x-full'
+        }`}
+      >
+        {drawerOpen && selectedPosition && (
+          <DrawerPanel
+            symbol={selectedSymbol!}
+            position={selectedPosition}
+            recommendation={recommendations[selectedSymbol!]}
+            loading={!!loadingRec[selectedSymbol!]}
+            error={recErrors[selectedSymbol!]}
+            snapshotId={snapshotIds[selectedSymbol!]}
+            recAction={recActions[selectedSymbol!]}
+            onAction={(sid, action) => onAction?.(selectedSymbol!, sid, action)}
+            onGetRecommendation={onGetRecommendation}
+            onClose={() => setSelectedSymbol(null)}
+            isRetirement={isSelectedRetirement}
+          />
+        )}
       </div>
-    </div>
+    </>
   )
 }
