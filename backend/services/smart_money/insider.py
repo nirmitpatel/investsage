@@ -102,8 +102,6 @@ def fetch_insider_trades(days_back: int = 7) -> List[Dict[str, Any]]:
                 "dateRange": "custom",
                 "startdt": start_date,
                 "enddt": date.today().isoformat(),
-                "hits.hits.total.value": "true",
-                "hits.hits._source": "period_of_report,entity_name,file_date,accession_no",
             },
             headers=HEADERS,
             timeout=15,
@@ -119,16 +117,23 @@ def fetch_insider_trades(days_back: int = 7) -> List[Dict[str, Any]]:
 
     for hit in hits[:200]:  # cap per run
         source = hit.get("_source", {})
-        accession = source.get("accession_no", "").replace("-", "")
-        entity_name = source.get("entity_name", "")
+        # EDGAR EFTS returns accession number in "adsh" field (with dashes)
+        accession_dashed = source.get("adsh", "")
+        accession = accession_dashed.replace("-", "")
+        # display_names has both reporter and issuer; entity_name comes from display_names
+        display_names = source.get("display_names", [])
+        entity_name = display_names[0].split("(CIK")[0].strip() if display_names else ""
         _id = hit.get("_id", "")
-        cik = source.get("entity_id", "") or (_id.split("/")[2] if _id.count("/") >= 2 else "")
+        # CIK for EDGAR archive path is the first CIK (reporting person/filer)
+        ciks_list = source.get("ciks", [])
+        cik = ciks_list[0].lstrip("0") if ciks_list else ""
+        # Filename is the part after the colon in _id (e.g. "0001234-25-000001:ownership.xml")
+        filename = _id.split(":")[-1] if ":" in _id else f"{accession_dashed}.xml"
 
         if not accession or not cik:
             continue
 
-        acc_dashed = f"{accession[:10]}-{accession[10:12]}-{accession[12:]}"
-        xml_url = f"https://www.sec.gov/Archives/edgar/data/{cik}/{accession}/{acc_dashed}.xml"
+        xml_url = f"https://www.sec.gov/Archives/edgar/data/{cik}/{accession}/{filename}"
 
         try:
             xml_resp = requests.get(xml_url, headers=HEADERS, timeout=10)

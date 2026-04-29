@@ -130,7 +130,7 @@ async def trigger_ingest(
         if source in ("congress", "all"):
             try:
                 from services.smart_money.congress import fetch_congress_trades
-                trades = await asyncio.to_thread(fetch_congress_trades)
+                trades = await fetch_congress_trades()
                 count = await asyncio.to_thread(upsert_smart_money_trades, trades, "congress")
                 results["congress"] = count
             except Exception as e:
