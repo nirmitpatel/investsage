@@ -10,6 +10,18 @@ from config import settings
 
 client = anthropic.Anthropic(api_key=settings.ANTHROPIC_API_KEY)
 
+
+def _create_message(**kwargs):
+    """Wrapper that converts RateLimitError to FastAPI 429 instead of 500."""
+    try:
+        return _create_message(**kwargs)
+    except anthropic.RateLimitError:
+        from fastapi import HTTPException
+        raise HTTPException(
+            status_code=429,
+            detail="AI rate limit reached — too many simultaneous requests. Please wait a moment and try again.",
+        )
+
 # Use Haiku for fast, cheap per-request summaries
 FAST_MODEL = "claude-haiku-4-5-20251001"
 # Use Sonnet for deeper analysis
@@ -28,7 +40,7 @@ Suggested replacement: {opportunity['replacement_suggestion']}
 
 Write 2-3 sentences explaining: (1) the tax benefit of harvesting this loss now, (2) whether they should wait for long-term treatment if close, (3) the replacement ETF to maintain exposure and avoid wash-sale rules. Be specific about dollar savings. Plain English, no jargon."""
 
-    message = client.messages.create(
+    message = _create_message(
         model=FAST_MODEL,
         max_tokens=250,
         messages=[{"role": "user", "content": prompt}],
@@ -69,7 +81,7 @@ Portfolio snapshot:
 
 Write a 3-4 sentence portfolio summary covering: (1) overall portfolio health in plain terms, (2) the biggest risk or strength, (3) one specific action to consider. Be direct and specific. No generic advice."""
 
-    message = client.messages.create(
+    message = _create_message(
         model=ANALYSIS_MODEL,
         max_tokens=350,
         messages=[{"role": "user", "content": prompt}],
@@ -129,7 +141,7 @@ Respond in this exact JSON format:
   "key_factors": ["factor 1", "factor 2", "factor 3"]
 }}"""
 
-    message = client.messages.create(
+    message = _create_message(
         model=FAST_MODEL,
         max_tokens=400,
         messages=[{"role": "user", "content": prompt}],
@@ -442,7 +454,7 @@ Respond in this exact JSON format:
   }}
 }}"""
 
-    message = client.messages.create(
+    message = _create_message(
         model=ANALYSIS_MODEL,
         max_tokens=600,
         messages=[{"role": "user", "content": prompt}],

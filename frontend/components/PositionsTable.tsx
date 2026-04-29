@@ -1081,7 +1081,7 @@ export default function PositionsTable({
     const pending = group.filter(p => !recommendations[p.symbol] && !loadingRec[p.symbol])
     for (const p of pending) {
       onGetRecommendation(p.symbol)
-      await new Promise(r => setTimeout(r, 350))
+      await new Promise(r => setTimeout(r, 1300))
     }
     setLoading(false)
   }
