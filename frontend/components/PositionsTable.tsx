@@ -1,6 +1,6 @@
 'use client'
 
-import { Fragment, useState, useEffect, useRef, useCallback, type CSSProperties } from 'react'
+import { useState, useEffect } from 'react'
 
 export interface Position {
   symbol: string
@@ -30,6 +30,26 @@ const ACCOUNT_TYPE_LABEL: Record<string, string> = {
   hsa: 'HSA',
 }
 
+const REC_COLORS: Record<string, string> = {
+  BUY_MORE: 'bg-emerald-500/15 text-emerald-400 border-emerald-500/30',
+  SELL: 'bg-red-500/15 text-red-400 border-red-500/30',
+  HOLD: 'bg-yellow-500/15 text-yellow-400 border-yellow-500/30',
+  REDUCE: 'bg-orange-500/15 text-orange-400 border-orange-500/30',
+  MAINTAIN: 'bg-yellow-500/15 text-yellow-400 border-yellow-500/30',
+  INCREASE: 'bg-emerald-500/15 text-emerald-400 border-emerald-500/30',
+}
+
+const REC_LABEL: Record<string, string> = {
+  BUY_MORE: 'BUY MORE', SELL: 'SELL', HOLD: 'HOLD',
+  REDUCE: 'REDUCE', MAINTAIN: 'MAINTAIN', INCREASE: 'INCREASE',
+}
+
+type SortField = 'symbol' | 'value' | 'gain_pct' | 'day_pct' | 'weight'
+type SortDir = 'asc' | 'desc'
+type ViewMode = 'tile' | 'list'
+
+// ── Utilities ────────────────────────────────────────────────────────────────
+
 function fmt(n: number | null, prefix = '') {
   if (n == null) return '—'
   return prefix + n.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
@@ -45,20 +65,21 @@ function gainBg(n: number | null) {
   return n >= 0 ? 'bg-emerald-500/10 text-emerald-400' : 'bg-red-500/10 text-red-400'
 }
 
-function NoCostBasis() {
-  return (
-    <span
-      className="inline-flex items-center gap-1 text-gray-600 cursor-default"
-      title="Upload a transactions CSV to calculate cost basis and gain/loss"
-    >
-      <span>—</span>
-      <svg className="w-3 h-3 text-gray-600 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-        <circle cx="12" cy="12" r="10" />
-        <path strokeLinecap="round" strokeLinejoin="round" d="M12 16v-4m0-4h.01" />
-      </svg>
-    </span>
-  )
+function dayChange(p: Position) {
+  if (p.current_price == null || p.previous_close == null) return null
+  const pct = ((p.current_price - p.previous_close) / p.previous_close) * 100
+  const dollar = p.total_shares != null ? (p.current_price - p.previous_close) * p.total_shares : null
+  return { pct, dollar }
 }
+
+function posClass(p: Position): 'gain' | 'loss' | 'flat' {
+  if (p.total_gain_loss_percent == null) return 'flat'
+  if (p.total_gain_loss_percent > 0) return 'gain'
+  if (p.total_gain_loss_percent < 0) return 'loss'
+  return 'flat'
+}
+
+// ── Small shared components ──────────────────────────────────────────────────
 
 function Spinner({ small }: { small?: boolean }) {
   const cls = small ? 'h-3 w-3' : 'h-4 w-4'
@@ -70,6 +91,29 @@ function Spinner({ small }: { small?: boolean }) {
   )
 }
 
+function NoCostBasis() {
+  return (
+    <span className="inline-flex items-center gap-1 text-gray-600 cursor-default" title="Upload a transactions CSV to calculate cost basis and gain/loss">
+      <span>—</span>
+      <svg className="w-3 h-3 text-gray-600 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+        <circle cx="12" cy="12" r="10" />
+        <path strokeLinecap="round" strokeLinejoin="round" d="M12 16v-4m0-4h.01" />
+      </svg>
+    </span>
+  )
+}
+
+function RecBadge({ rec, small }: { rec: any; small?: boolean }) {
+  const color = REC_COLORS[rec.recommendation] ?? 'bg-gray-500/15 text-gray-400 border-gray-500/30'
+  const sz = small ? 'text-[10px] px-2 py-0.5' : 'text-xs px-2.5 py-1'
+  return (
+    <span className={`inline-flex items-center gap-1 font-semibold rounded-lg border ${sz} ${color}`}>
+      {REC_LABEL[rec.recommendation] ?? rec.recommendation}
+      {rec.confidence && <span className="opacity-60 font-normal">{rec.confidence[0]}</span>}
+    </span>
+  )
+}
+
 function ActionButtons({ snapshotId, currentAction, onAction }: {
   snapshotId: string | null
   currentAction?: string
@@ -78,7 +122,7 @@ function ActionButtons({ snapshotId, currentAction, onAction }: {
   if (!snapshotId) return null
   if (currentAction === 'followed') {
     return (
-      <div className="flex items-center gap-1.5 pt-4 border-t border-white/[0.05]">
+      <div className="flex items-center gap-1.5">
         <svg className="w-3.5 h-3.5 text-emerald-500 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
           <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
         </svg>
@@ -87,14 +131,10 @@ function ActionButtons({ snapshotId, currentAction, onAction }: {
     )
   }
   if (currentAction === 'ignored') {
-    return (
-      <div className="pt-4 border-t border-white/[0.05]">
-        <span className="text-sm text-gray-600">Ignored</span>
-      </div>
-    )
+    return <span className="text-sm text-gray-600">Ignored</span>
   }
   return (
-    <div className="flex gap-2 pt-4 border-t border-white/[0.05]">
+    <div className="flex gap-2">
       <button
         onClick={() => onAction(snapshotId, 'followed')}
         className="flex-1 py-2.5 text-xs font-semibold rounded-lg border border-emerald-500/20 text-emerald-500/80 hover:bg-emerald-500/[0.08] hover:text-emerald-400 transition"
@@ -111,420 +151,706 @@ function ActionButtons({ snapshotId, currentAction, onAction }: {
   )
 }
 
-const REC_COLORS: Record<string, string> = {
-  BUY_MORE: 'bg-emerald-500/15 text-emerald-400 border-emerald-500/30',
-  SELL: 'bg-red-500/15 text-red-400 border-red-500/30',
-  HOLD: 'bg-yellow-500/15 text-yellow-400 border-yellow-500/30',
-  REDUCE: 'bg-orange-500/15 text-orange-400 border-orange-500/30',
-  MAINTAIN: 'bg-yellow-500/15 text-yellow-400 border-yellow-500/30',
-  INCREASE: 'bg-emerald-500/15 text-emerald-400 border-emerald-500/30',
-}
+// ── View Toggle ──────────────────────────────────────────────────────────────
 
-const REC_LABEL: Record<string, string> = {
-  BUY_MORE: 'BUY MORE', SELL: 'SELL', HOLD: 'HOLD',
-  REDUCE: 'REDUCE', MAINTAIN: 'MAINTAIN', INCREASE: 'INCREASE',
-}
-
-function RecBadge({ rec }: { rec: any }) {
-  const color = REC_COLORS[rec.recommendation] ?? 'bg-gray-500/15 text-gray-400 border-gray-500/30'
-  const [visible, setVisible] = useState(false)
-  const [popoverStyle, setPopoverStyle] = useState<CSSProperties>({})
-  const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
-  const btnRef = useRef<HTMLButtonElement>(null)
-
-  const openPopover = useCallback(() => {
-    if (!btnRef.current) return
-    const rect = btnRef.current.getBoundingClientRect()
-    const popoverWidth = 280
-    const popoverHeight = 160 // conservative estimate
-    const viewportH = window.innerHeight
-    const viewportW = window.innerWidth
-
-    let top = rect.bottom + 6
-    if (top + popoverHeight > viewportH - 8) {
-      top = rect.top - popoverHeight - 6
-    }
-    let left = rect.left
-    if (left + popoverWidth > viewportW - 8) {
-      left = viewportW - popoverWidth - 8
-    }
-    setPopoverStyle({ position: 'fixed', top, left, width: popoverWidth, zIndex: 9999 })
-    setVisible(true)
-  }, [])
-
-  const handleMouseEnter = useCallback(() => {
-    timerRef.current = setTimeout(openPopover, 150)
-  }, [openPopover])
-
-  const handleMouseLeave = useCallback(() => {
-    if (timerRef.current) clearTimeout(timerRef.current)
-    setVisible(false)
-  }, [])
-
+function ViewToggle({ view, onChange }: { view: ViewMode; onChange: (v: ViewMode) => void }) {
   return (
-    <span className="relative inline-flex">
+    <div className="flex items-center gap-0.5 bg-white/[0.04] border border-white/[0.06] rounded-lg p-0.5">
       <button
-        ref={btnRef}
-        onMouseEnter={handleMouseEnter}
-        onMouseLeave={handleMouseLeave}
-        className={`inline-flex items-center gap-1 text-xs font-semibold px-2.5 py-1 rounded-lg border cursor-default ${color}`}
+        onClick={() => onChange('tile')}
+        title="Tile view"
+        className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-md text-xs font-medium transition ${
+          view === 'tile' ? 'bg-white/[0.08] text-white' : 'text-gray-500 hover:text-gray-300'
+        }`}
       >
-        {REC_LABEL[rec.recommendation] ?? rec.recommendation}
-        {rec.confidence && <span className="opacity-60 font-normal">{rec.confidence[0]}</span>}
-      </button>
-      {visible && (
-        <div
-          style={popoverStyle}
-          className="rounded-xl border border-white/[0.08] bg-[#13131f] shadow-xl p-4 space-y-3"
-          onMouseEnter={() => { if (timerRef.current) clearTimeout(timerRef.current); setVisible(true) }}
-          onMouseLeave={() => setVisible(false)}
-        >
-          {rec.reasoning && (
-            <p className="text-xs text-gray-300 leading-relaxed">{rec.reasoning}</p>
-          )}
-          {rec.key_factors?.length > 0 && (
-            <div className="space-y-1">
-              {rec.key_factors.map((f: string, i: number) => (
-                <div key={i} className="flex gap-2 text-xs text-gray-500">
-                  <span className="text-gray-700 shrink-0">·</span>
-                  <span>{f}</span>
-                </div>
-              ))}
-            </div>
-          )}
-        </div>
-      )}
-    </span>
-  )
-}
-
-// ── Shared analysis content (used by both drawer and inline expand) ───────────
-
-function AnalysisContent({
-  symbol, recommendation, loading, error, snapshotId, recAction,
-  onAction, onGetRecommendation, isRetirement,
-}: {
-  symbol: string
-  recommendation: any
-  loading: boolean
-  error?: string
-  snapshotId?: string
-  recAction?: string
-  onAction: (snapshotId: string, action: 'followed' | 'ignored') => void
-  onGetRecommendation: (symbol: string) => void
-  isRetirement: boolean
-}) {
-  if (loading) {
-    return <div className="flex justify-center py-10 text-gray-600"><Spinner /></div>
-  }
-
-  if (recommendation) {
-    return (
-      <div className="space-y-4">
-        <div className="flex items-center gap-3">
-          <RecBadge rec={recommendation} />
-          <span className={`text-[10px] font-semibold uppercase tracking-widest ${isRetirement ? 'text-amber-700' : 'text-violet-600'}`}>
-            Sage{isRetirement ? ' — Retirement' : ' Analysis'}
-          </span>
-        </div>
-        {recommendation.reasoning && (
-          <div className="bg-white/[0.03] border border-white/[0.06] rounded-xl p-4">
-            <p className="text-sm text-gray-300 leading-relaxed">{recommendation.reasoning}</p>
-          </div>
-        )}
-        {recommendation.key_factors?.length > 0 && (
-          <div>
-            <p className="text-[10px] font-semibold uppercase tracking-widest text-gray-600 mb-2">Key Factors</p>
-            <div className="space-y-1.5">
-              {recommendation.key_factors.map((f: string, i: number) => (
-                <div key={i} className="flex gap-2 text-xs text-gray-500 leading-relaxed">
-                  <span className="text-gray-700 shrink-0 mt-0.5">·</span>
-                  <span>{f}</span>
-                </div>
-              ))}
-            </div>
-          </div>
-        )}
-        {recommendation.recommendation === 'SELL' && recommendation.opportunity_cost && (
-          <div className="bg-emerald-500/[0.04] border border-emerald-500/[0.12] rounded-xl p-4">
-            <p className="text-[10px] font-semibold uppercase tracking-widest text-emerald-700 mb-2">Opportunity Cost</p>
-            <p className="text-xs text-gray-500 mb-1.5">
-              Capital freed:{' '}
-              <span className="text-white font-medium">
-                ${recommendation.opportunity_cost.freed_capital.toLocaleString('en-US', { maximumFractionDigits: 0 })}
-              </span>
-            </p>
-            {recommendation.opportunity_cost.best_position && (
-              <p className="text-xs text-gray-500 mb-1.5">
-                Best performer:{' '}
-                <span className="text-emerald-400 font-medium">{recommendation.opportunity_cost.best_position.symbol}</span>{' '}
-                <span className="text-emerald-400">+{recommendation.opportunity_cost.best_position.return_pct}%</span>
-                <span className="text-gray-600"> all-time</span>
-              </p>
-            )}
-            {recommendation.opportunity_cost.best_sector && (
-              <p className="text-xs text-gray-500">
-                Strongest sector:{' '}
-                <span className="text-emerald-400 font-medium">{recommendation.opportunity_cost.best_sector.name}</span>{' '}
-                <span className="text-emerald-400">+{recommendation.opportunity_cost.best_sector.return_pct}%</span>
-                <span className="text-gray-600"> ({recommendation.opportunity_cost.best_sector.period} trend)</span>
-              </p>
-            )}
-          </div>
-        )}
-        <ActionButtons snapshotId={snapshotId ?? null} currentAction={recAction} onAction={onAction} />
-      </div>
-    )
-  }
-
-  if (error) {
-    return (
-      <div className="text-center py-4">
-        <p className="text-xs text-red-400 mb-3">{error}</p>
-        <button
-          onClick={() => onGetRecommendation(symbol)}
-          className="text-xs border border-red-500/20 text-red-400 hover:text-red-300 px-3 py-1.5 rounded-lg transition"
-        >
-          Retry
-        </button>
-      </div>
-    )
-  }
-
-  return (
-    <div className="flex items-center justify-between gap-3 py-2">
-      <p className="text-xs text-gray-600">Sage hasn't analyzed {symbol} yet.</p>
-      <button
-        onClick={() => onGetRecommendation(symbol)}
-        className="inline-flex items-center gap-1.5 text-xs text-gray-400 hover:text-violet-400 border border-white/[0.08] hover:border-violet-500/30 px-3 py-1.5 rounded-lg transition shrink-0"
-      >
-        <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-          <path strokeLinecap="round" strokeLinejoin="round" d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z" />
+        <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+          <rect x="3" y="3" width="7" height="7" rx="1" /><rect x="14" y="3" width="7" height="7" rx="1" />
+          <rect x="3" y="14" width="7" height="7" rx="1" /><rect x="14" y="14" width="7" height="7" rx="1" />
         </svg>
-        Ask Sage
+        Tiles
+      </button>
+      <button
+        onClick={() => onChange('list')}
+        title="List view"
+        className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-md text-xs font-medium transition ${
+          view === 'list' ? 'bg-white/[0.08] text-white' : 'text-gray-500 hover:text-gray-300'
+        }`}
+      >
+        <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+          <path strokeLinecap="round" strokeLinejoin="round" d="M4 6h16M4 12h16M4 18h16" />
+        </svg>
+        List
       </button>
     </div>
   )
 }
 
-// ── Option B: Side Drawer (desktop, fixed overlay) ──────────────────────────
+// ── Sort & Filter Bar ────────────────────────────────────────────────────────
 
-interface DrawerProps {
-  symbol: string
-  position: Position
-  recommendation: any
-  loading: boolean
-  error?: string
-  snapshotId?: string
-  recAction?: string
-  onAction: (snapshotId: string, action: 'followed' | 'ignored') => void
-  onGetRecommendation: (symbol: string) => void
-  onClose: () => void
-  isRetirement: boolean
-}
+function SortFilterBar({
+  sortField, sortDir, onSort,
+  filterSector, onFilterSector,
+  filterRec, onFilterRec,
+  sectors,
+}: {
+  sortField: SortField; sortDir: SortDir; onSort: (f: SortField) => void
+  filterSector: string | null; onFilterSector: (s: string | null) => void
+  filterRec: string | null; onFilterRec: (r: string | null) => void
+  sectors: string[]
+}) {
+  const sorts: { field: SortField; label: string }[] = [
+    { field: 'value', label: 'Value' },
+    { field: 'gain_pct', label: 'Gain %' },
+    { field: 'day_pct', label: 'Day %' },
+    { field: 'weight', label: 'Weight' },
+    { field: 'symbol', label: 'Symbol' },
+  ]
 
-function DrawerPanel({
-  symbol, position, recommendation, loading, error,
-  snapshotId, recAction, onAction, onGetRecommendation, onClose, isRetirement,
-}: DrawerProps) {
+  const recs = [
+    { key: 'BUY_MORE', label: 'Buy More' },
+    { key: 'HOLD', label: 'Hold' },
+    { key: 'SELL', label: 'Sell' },
+  ]
+
   return (
-    <div className="flex flex-col h-full">
-      <div className="flex items-center justify-between px-5 py-4 border-b border-white/[0.06] shrink-0">
-        <div className="flex items-center gap-3">
-          <div className={`w-9 h-9 rounded-xl flex items-center justify-center text-xs font-bold shrink-0 ${
-            isRetirement
-              ? 'bg-amber-500/10 border border-amber-500/20 text-amber-300'
-              : 'bg-violet-500/10 border border-violet-500/20 text-violet-300'
-          }`}>
-            {symbol.slice(0, 2)}
-          </div>
-          <div>
-            <div className="font-bold text-[15px] text-white">{symbol}</div>
-            <div className="text-[11px] text-gray-500 mt-0.5">{position.description || '—'}</div>
-          </div>
-        </div>
+    <div className="flex flex-wrap items-center gap-2 px-5 py-3 border-b border-white/[0.04] bg-white/[0.01]">
+      {/* Sort */}
+      <span className="text-[10px] font-semibold uppercase tracking-wider text-gray-600 mr-1">Sort</span>
+      {sorts.map(s => (
         <button
-          onClick={onClose}
-          className="w-7 h-7 rounded-lg bg-white/[0.04] border border-white/[0.06] flex items-center justify-center text-gray-500 hover:text-white hover:bg-white/[0.08] transition shrink-0"
+          key={s.field}
+          onClick={() => onSort(s.field)}
+          className={`flex items-center gap-1 text-xs px-2.5 py-1 rounded-lg border transition ${
+            sortField === s.field
+              ? 'bg-violet-500/15 border-violet-500/30 text-violet-300'
+              : 'border-white/[0.06] text-gray-500 hover:text-gray-300 hover:border-white/[0.12]'
+          }`}
         >
-          <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-            <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
-          </svg>
+          {s.label}
+          {sortField === s.field && (
+            <svg className={`w-2.5 h-2.5 transition-transform ${sortDir === 'asc' ? 'rotate-180' : ''}`} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" />
+            </svg>
+          )}
         </button>
-      </div>
-      <div className="flex-1 overflow-y-auto p-5">
-        <AnalysisContent
-          symbol={symbol}
-          recommendation={recommendation}
-          loading={loading}
-          error={error}
-          snapshotId={snapshotId}
-          recAction={recAction}
-          onAction={onAction}
-          onGetRecommendation={onGetRecommendation}
-          isRetirement={isRetirement}
-        />
-      </div>
+      ))}
+
+      {/* Divider */}
+      {(sectors.length > 0 || true) && <div className="w-px h-4 bg-white/[0.08] mx-1" />}
+
+      {/* Rec filter */}
+      <span className="text-[10px] font-semibold uppercase tracking-wider text-gray-600 mr-1">Rec</span>
+      <button
+        onClick={() => onFilterRec(null)}
+        className={`text-xs px-2.5 py-1 rounded-lg border transition ${
+          filterRec === null
+            ? 'bg-white/[0.08] border-white/[0.15] text-white'
+            : 'border-white/[0.06] text-gray-500 hover:text-gray-300 hover:border-white/[0.12]'
+        }`}
+      >All</button>
+      {recs.map(r => (
+        <button
+          key={r.key}
+          onClick={() => onFilterRec(filterRec === r.key ? null : r.key)}
+          className={`text-xs px-2.5 py-1 rounded-lg border transition ${
+            filterRec === r.key
+              ? REC_COLORS[r.key] + ' !border-opacity-50'
+              : 'border-white/[0.06] text-gray-500 hover:text-gray-300 hover:border-white/[0.12]'
+          }`}
+        >
+          {r.label}
+        </button>
+      ))}
+
+      {/* Sector filter */}
+      {sectors.length > 1 && (
+        <>
+          <div className="w-px h-4 bg-white/[0.08] mx-1" />
+          <span className="text-[10px] font-semibold uppercase tracking-wider text-gray-600 mr-1">Sector</span>
+          <button
+            onClick={() => onFilterSector(null)}
+            className={`text-xs px-2.5 py-1 rounded-lg border transition ${
+              filterSector === null
+                ? 'bg-white/[0.08] border-white/[0.15] text-white'
+                : 'border-white/[0.06] text-gray-500 hover:text-gray-300 hover:border-white/[0.12]'
+            }`}
+          >All</button>
+          {sectors.map(s => (
+            <button
+              key={s}
+              onClick={() => onFilterSector(filterSector === s ? null : s)}
+              className={`text-xs px-2.5 py-1 rounded-lg border transition ${
+                filterSector === s
+                  ? 'bg-cyan-500/15 border-cyan-500/30 text-cyan-300'
+                  : 'border-white/[0.06] text-gray-500 hover:text-gray-300 hover:border-white/[0.12]'
+              }`}
+            >
+              {s}
+            </button>
+          ))}
+        </>
+      )}
     </div>
   )
 }
 
-// ── Option A: Inline Expand Row (mobile) ─────────────────────────────────────
+// ── Tile Card (Design B) ─────────────────────────────────────────────────────
 
-function InlineExpandRow({
-  colSpan, symbol, recommendation, loading, error,
-  snapshotId, recAction, onAction, onGetRecommendation, isRetirement,
-}: {
-  colSpan: number
-  symbol: string
-  recommendation: any
-  loading: boolean
-  error?: string
-  snapshotId?: string
-  recAction?: string
-  onAction: (snapshotId: string, action: 'followed' | 'ignored') => void
-  onGetRecommendation: (symbol: string) => void
-  isRetirement: boolean
-}) {
-  return (
-    <tr className="border-b border-white/[0.04]">
-      <td colSpan={colSpan} className="px-4 pb-4 pt-0">
-        <div className={`rounded-xl border p-4 ${
-          isRetirement
-            ? 'bg-amber-500/[0.03] border-amber-500/[0.10]'
-            : 'bg-violet-500/[0.03] border-violet-500/[0.10]'
-        }`}>
-          <AnalysisContent
-            symbol={symbol}
-            recommendation={recommendation}
-            loading={loading}
-            error={error}
-            snapshotId={snapshotId}
-            recAction={recAction}
-            onAction={onAction}
-            onGetRecommendation={onGetRecommendation}
-            isRetirement={isRetirement}
-          />
-        </div>
-      </td>
-    </tr>
-  )
-}
-
-// ── Position Row ─────────────────────────────────────────────────────────────
-
-function PositionRow({
-  p, recommendations, loadingRec, recErrors,
-  isSelected, onRowClick, onGetRecommendation, readOnly, isRetirement,
+function PositionCard({
+  p, rec, loadingRec, recError, isRetirement, onClick, onAskSage,
 }: {
   p: Position
-  recommendations: Record<string, any>
-  loadingRec: Record<string, boolean>
-  recErrors: Record<string, string>
-  isSelected: boolean
-  onRowClick: (symbol: string) => void
-  onGetRecommendation: (symbol: string) => void
-  readOnly?: boolean
+  rec: any
+  loadingRec: boolean
+  recError?: string
   isRetirement: boolean
+  onClick: () => void
+  onAskSage: (e: React.MouseEvent) => void
 }) {
-  const selectedBg = isRetirement ? 'bg-amber-500/[0.05]' : 'bg-violet-500/[0.06]'
+  const cls = posClass(p)
+  const day = dayChange(p)
+
+  const topBar = cls === 'gain'
+    ? 'from-transparent via-emerald-400/60 to-transparent'
+    : cls === 'loss'
+    ? 'from-transparent via-red-400/60 to-transparent'
+    : 'from-transparent via-violet-400/40 to-transparent'
+
+  const avatarCls = isRetirement
+    ? 'bg-amber-500/10 border border-amber-500/20 text-amber-300'
+    : cls === 'gain'
+    ? 'bg-emerald-500/10 border border-emerald-400/20 text-emerald-300'
+    : cls === 'loss'
+    ? 'bg-red-500/10 border border-red-400/20 text-red-300'
+    : 'bg-violet-500/10 border border-violet-500/20 text-violet-300'
+
+  const gainBigColor = cls === 'gain' ? 'text-emerald-400' : cls === 'loss' ? 'text-red-400' : 'text-violet-300'
+  const gainSubColor = cls === 'gain' ? 'text-emerald-500/60' : cls === 'loss' ? 'text-red-500/60' : 'text-violet-400/50'
+  const weightFill = cls === 'gain'
+    ? 'from-emerald-500/40 to-emerald-400/70'
+    : cls === 'loss'
+    ? 'from-red-500/40 to-red-400/70'
+    : 'from-violet-500/30 to-violet-400/60'
+
+  return (
+    <div
+      onClick={onClick}
+      className="relative overflow-hidden bg-white/[0.025] border border-white/[0.07] rounded-[18px] p-[18px] cursor-pointer transition-all duration-200 hover:-translate-y-0.5 hover:border-white/[0.13] hover:shadow-[0_12px_40px_rgba(0,0,0,0.3)] group"
+    >
+      {/* top edge glow */}
+      <div className={`absolute top-0 left-[10%] right-[10%] h-[2px] bg-gradient-to-r ${topBar} rounded-t-[18px]`} />
+
+      {/* hover glow bg */}
+      <div className={`absolute inset-0 rounded-[18px] opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none ${
+        cls === 'gain'
+          ? 'bg-[radial-gradient(ellipse_80%_60%_at_50%_0%,rgba(16,185,129,0.07)_0%,transparent_70%)]'
+          : cls === 'loss'
+          ? 'bg-[radial-gradient(ellipse_80%_60%_at_50%_0%,rgba(239,68,68,0.07)_0%,transparent_70%)]'
+          : ''
+      }`} />
+
+      {/* header */}
+      <div className="relative flex items-start justify-between mb-3.5">
+        <div className="flex items-center gap-2.5">
+          <div className={`w-10 h-10 rounded-[13px] flex items-center justify-center text-xs font-bold shrink-0 ${avatarCls}`}>
+            {p.symbol.slice(0, 2)}
+          </div>
+          <div>
+            <div className="flex items-center gap-1.5">
+              <span className="font-bold text-base text-white tracking-tight">{p.symbol}</span>
+              {p.account_type && p.account_type !== 'individual' && (
+                <span className="text-[9px] font-medium px-1.5 py-0.5 rounded bg-amber-500/10 text-amber-400 border border-amber-500/20">
+                  {ACCOUNT_TYPE_LABEL[p.account_type] ?? p.account_type}
+                </span>
+              )}
+            </div>
+            <div className="text-[11px] text-gray-500 mt-0.5 truncate max-w-[120px]">{p.description}</div>
+          </div>
+        </div>
+
+        {/* rec badge */}
+        {loadingRec ? (
+          <span className="inline-flex"><Spinner small /></span>
+        ) : rec ? (
+          <RecBadge rec={rec} small />
+        ) : recError ? (
+          <button
+            onClick={onAskSage}
+            className="text-[10px] text-red-400 border border-red-500/20 px-2 py-0.5 rounded-lg"
+          >Retry</button>
+        ) : (
+          <button
+            onClick={onAskSage}
+            className="text-[10px] text-gray-500 hover:text-violet-400 border border-white/[0.07] hover:border-violet-500/30 px-2 py-0.5 rounded-lg transition"
+          >
+            Ask Sage
+          </button>
+        )}
+      </div>
+
+      {/* big gain */}
+      <div className={`relative text-[26px] font-bold tracking-tight leading-none mb-1 ${gainBigColor}`}>
+        {p.total_gain_loss_percent != null
+          ? (p.total_gain_loss_percent >= 0 ? '+' : '') + p.total_gain_loss_percent.toFixed(1) + '%'
+          : '—'}
+      </div>
+      <div className={`relative text-xs mb-3.5 ${gainSubColor}`}>
+        {p.total_gain_loss != null
+          ? (p.total_gain_loss >= 0 ? '+$' : '−$') + Math.abs(p.total_gain_loss).toLocaleString('en-US', { maximumFractionDigits: 0 }) + ' all-time'
+          : 'No cost basis'}
+      </div>
+
+      {/* metrics */}
+      <div className="relative grid grid-cols-3 gap-2 mb-3">
+        {[
+          { label: 'Value', value: p.current_value != null ? '$' + p.current_value.toLocaleString('en-US', { maximumFractionDigits: 0 }) : '—' },
+          { label: 'Shares', value: p.total_shares ?? '—' },
+          { label: 'Price', value: p.current_price != null ? '$' + p.current_price.toLocaleString('en-US', { minimumFractionDigits: 0, maximumFractionDigits: 2 }) : '—' },
+        ].map(m => (
+          <div key={m.label} className="bg-white/[0.03] rounded-[10px] p-2">
+            <div className="text-[9px] font-semibold uppercase tracking-wider text-gray-600 mb-1">{m.label}</div>
+            <div className="text-[13px] font-semibold text-gray-200">{String(m.value)}</div>
+          </div>
+        ))}
+      </div>
+
+      {/* weight bar */}
+      {p.percent_of_account != null && (
+        <div className="relative flex items-center gap-2 mb-2.5">
+          <span className="text-[10px] text-gray-600 w-[60px] shrink-0">Portfolio wt.</span>
+          <div className="flex-1 h-[3px] bg-white/[0.06] rounded-full overflow-hidden">
+            <div className={`h-full rounded-full bg-gradient-to-r ${weightFill}`} style={{ width: `${Math.min(p.percent_of_account, 100)}%` }} />
+          </div>
+          <span className="text-[10px] text-gray-600 w-8 text-right shrink-0">{p.percent_of_account.toFixed(1)}%</span>
+        </div>
+      )}
+
+      {/* today + sector */}
+      <div className="relative flex items-center gap-2 flex-wrap">
+        {day && (
+          <span className={`inline-flex items-center gap-1 text-[11px] font-semibold px-2 py-0.5 rounded-md ${
+            day.pct >= 0 ? 'bg-emerald-500/[0.08] text-emerald-400/80' : 'bg-red-500/[0.08] text-red-400/80'
+          }`}>
+            {day.pct >= 0 ? '▲' : '▼'} {day.pct >= 0 ? '+' : ''}{day.pct.toFixed(2)}% today
+          </span>
+        )}
+        {p.sector && (
+          <span className="text-[10px] text-gray-600 bg-white/[0.04] px-2 py-0.5 rounded-md">{p.sector}</span>
+        )}
+      </div>
+    </div>
+  )
+}
+
+// ── List Row (Design C) ──────────────────────────────────────────────────────
+
+function PositionRow({
+  p, rec, loadingRec, recError, isSelected, isRetirement, onRowClick, onAskSage,
+}: {
+  p: Position
+  rec: any
+  loadingRec: boolean
+  recError?: string
+  isSelected: boolean
+  isRetirement: boolean
+  onRowClick: () => void
+  onAskSage: (e: React.MouseEvent) => void
+}) {
+  const cls = posClass(p)
+  const day = dayChange(p)
+
+  const accentColor = cls === 'gain'
+    ? 'from-emerald-400 to-emerald-500/20'
+    : cls === 'loss'
+    ? 'from-red-400 to-red-500/20'
+    : 'from-violet-400/60 to-violet-500/10'
 
   return (
     <tr
-      onClick={() => onRowClick(p.symbol)}
-      className={`cursor-pointer transition-colors ${isSelected ? selectedBg : 'hover:bg-white/[0.02]'}`}
+      onClick={onRowClick}
+      className={`cursor-pointer border-b border-white/[0.03] transition-colors ${
+        isSelected ? 'bg-cyan-500/[0.04]' : 'hover:bg-white/[0.025]'
+      }`}
     >
-      <td className="px-5 py-4">
+      {/* left accent bar */}
+      <td className="w-1 p-0">
+        <div className={`w-1 min-h-[44px] bg-gradient-to-b ${accentColor}`} />
+      </td>
+
+      {/* symbol */}
+      <td className="py-3 pl-3 pr-5 min-w-[170px]">
         <div className="flex items-center gap-3">
           <div className={`w-8 h-8 rounded-lg flex items-center justify-center text-xs font-bold shrink-0 ${
             isRetirement
               ? 'bg-amber-500/10 border border-amber-500/20 text-amber-300'
+              : cls === 'gain'
+              ? 'bg-emerald-500/10 border border-emerald-400/20 text-emerald-300'
+              : cls === 'loss'
+              ? 'bg-red-500/10 border border-red-400/20 text-red-300'
               : 'bg-violet-500/10 border border-violet-500/20 text-violet-300'
           }`}>
             {p.symbol.slice(0, 2)}
           </div>
           <div>
             <div className="flex items-center gap-1.5">
-              <span className="font-semibold text-white">{p.symbol}</span>
+              <span className="font-bold text-[13px] text-white font-mono">{p.symbol}</span>
               {p.account_type && p.account_type !== 'individual' && (
-                <span className="text-[10px] font-medium px-1.5 py-0.5 rounded bg-amber-500/10 text-amber-400 border border-amber-500/20">
+                <span className="text-[9px] font-medium px-1.5 py-0.5 rounded bg-amber-500/10 text-amber-400 border border-amber-500/20">
                   {ACCOUNT_TYPE_LABEL[p.account_type] ?? p.account_type}
                 </span>
               )}
             </div>
-            <div className="text-gray-600 text-xs truncate max-w-[140px]">{p.description}</div>
+            <div className="text-[10px] text-gray-600 truncate max-w-[120px]">{p.description}</div>
           </div>
         </div>
       </td>
-      <td className="px-5 py-4">
-        {p.sector
-          ? <span className="text-xs bg-white/[0.05] border border-white/[0.08] px-2.5 py-1 rounded-full text-gray-400">{p.sector}</span>
-          : <span className="text-gray-700">—</span>}
+
+      {/* sector */}
+      <td className="px-4 py-3 text-left">
+        {p.sector ? (
+          <span className="inline-flex items-center gap-1.5 text-[10px] text-gray-500">
+            <span className="w-1.5 h-1.5 rounded-[1px] bg-violet-400 shrink-0" />
+            {p.sector}
+          </span>
+        ) : <span className="text-gray-700">—</span>}
       </td>
-      <td className="px-5 py-4 text-right text-gray-300">{p.total_shares ?? '—'}</td>
-      <td className="px-5 py-4 text-right text-gray-300">{fmt(p.current_price, '$')}</td>
-      <td className="px-5 py-4 text-right font-semibold text-white">{fmt(p.current_value, '$')}</td>
-      <td className="px-5 py-4 text-right text-gray-500">
+
+      {/* shares */}
+      <td className="px-4 py-3 text-right text-sm text-gray-400 font-mono">{p.total_shares ?? '—'}</td>
+
+      {/* price */}
+      <td className="px-4 py-3 text-right text-sm text-gray-400 font-mono">{fmt(p.current_price, '$')}</td>
+
+      {/* value */}
+      <td className="px-4 py-3 text-right text-sm font-semibold text-white font-mono">{fmt(p.current_value, '$')}</td>
+
+      {/* cost */}
+      <td className="px-4 py-3 text-right text-sm text-gray-600 font-mono">
         {p.total_cost_basis != null ? fmt(p.total_cost_basis, '$') : <NoCostBasis />}
       </td>
-      <td className={`px-5 py-4 text-right font-medium ${gainColor(p.total_gain_loss)}`}>
+
+      {/* P&L $ */}
+      <td className={`px-4 py-3 text-right text-sm font-medium font-mono ${gainColor(p.total_gain_loss)}`}>
         {p.total_gain_loss != null
-          ? (p.total_gain_loss >= 0 ? '+$' : '−$') + Math.abs(p.total_gain_loss).toLocaleString('en-US', { minimumFractionDigits: 2 })
+          ? (p.total_gain_loss >= 0 ? '+$' : '−$') + Math.abs(p.total_gain_loss).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
           : <span className="text-gray-700">—</span>}
       </td>
-      <td className="px-5 py-4 text-right">
+
+      {/* P&L % */}
+      <td className="px-4 py-3 text-right">
         {p.total_gain_loss_percent != null ? (
-          <span className={`text-xs px-2 py-1 rounded-lg font-medium ${gainBg(p.total_gain_loss_percent)}`}>
+          <span className={`text-xs px-2 py-0.5 rounded-md font-medium font-mono ${gainBg(p.total_gain_loss_percent)}`}>
             {p.total_gain_loss_percent >= 0 ? '+' : ''}{p.total_gain_loss_percent.toFixed(2)}%
           </span>
         ) : <span className="text-gray-700">—</span>}
       </td>
-      <td className="px-5 py-4 text-right">
-        {(() => {
-          const { current_price, previous_close, total_shares } = p
-          if (current_price == null || previous_close == null) return <span className="text-gray-700">—</span>
-          const dayPct = ((current_price - previous_close) / previous_close) * 100
-          const dayDollar = total_shares != null ? (current_price - previous_close) * total_shares : null
-          const pos = dayPct >= 0
-          return (
-            <div className="flex flex-col items-end gap-0.5">
-              <span className={`text-xs font-semibold ${pos ? 'text-emerald-400' : 'text-red-400'}`}>
-                {pos ? '+' : ''}{dayPct.toFixed(2)}%
+
+      {/* day */}
+      <td className="px-4 py-3 text-right">
+        {day ? (
+          <div className="flex flex-col items-end gap-0.5">
+            <span className={`text-xs font-semibold font-mono ${day.pct >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>
+              {day.pct >= 0 ? '+' : ''}{day.pct.toFixed(2)}%
+            </span>
+            {day.dollar != null && (
+              <span className={`text-[11px] font-mono ${day.pct >= 0 ? 'text-emerald-500/60' : 'text-red-500/60'}`}>
+                {day.pct >= 0 ? '+$' : '−$'}{Math.abs(day.dollar).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
               </span>
-              {dayDollar != null && (
-                <span className={`text-[11px] ${pos ? 'text-emerald-500/70' : 'text-red-500/70'}`}>
-                  {pos ? '+$' : '−$'}{Math.abs(dayDollar).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                </span>
-              )}
-            </div>
-          )
-        })()}
+            )}
+          </div>
+        ) : <span className="text-gray-700">—</span>}
       </td>
-      {!readOnly && (
-        <td className="px-5 py-4 text-right">
-          {loadingRec[p.symbol] ? (
-            <span className="inline-flex justify-center w-full"><Spinner /></span>
-          ) : recommendations[p.symbol] ? (
-            <RecBadge rec={recommendations[p.symbol]} />
-          ) : recErrors[p.symbol] ? (
-            <button
-              onClick={(e) => { e.stopPropagation(); onRowClick(p.symbol); onGetRecommendation(p.symbol) }}
-              title={recErrors[p.symbol]}
-              className="text-xs text-red-400 hover:text-red-300 border border-red-500/20 hover:border-red-500/40 px-2.5 py-1 rounded-lg transition"
-            >
-              Retry
-            </button>
-          ) : (
-            <button
-              onClick={(e) => { e.stopPropagation(); onRowClick(p.symbol); onGetRecommendation(p.symbol) }}
-              className="text-xs text-gray-600 hover:text-violet-400 border border-white/[0.06] hover:border-violet-500/30 px-2.5 py-1 rounded-lg transition"
-            >
-              Ask Sage
-            </button>
-          )}
-        </td>
-      )}
+
+      {/* sage */}
+      <td className="px-4 py-3 text-right">
+        {loadingRec ? (
+          <span className="inline-flex justify-center"><Spinner small /></span>
+        ) : rec ? (
+          <RecBadge rec={rec} small />
+        ) : recError ? (
+          <button onClick={onAskSage} className="text-xs text-red-400 border border-red-500/20 px-2 py-0.5 rounded-lg">Retry</button>
+        ) : (
+          <button onClick={onAskSage} className="text-xs text-gray-600 hover:text-violet-400 border border-white/[0.06] hover:border-violet-500/30 px-2.5 py-1 rounded-lg transition">
+            Ask Sage
+          </button>
+        )}
+      </td>
     </tr>
+  )
+}
+
+// ── Detail Modal (Design C sheet as modal) ───────────────────────────────────
+
+function DetailModal({
+  p, rec, loadingRec, recError, snapshotId, recAction,
+  isRetirement, onClose, onAction, onGetRecommendation,
+}: {
+  p: Position
+  rec: any
+  loadingRec: boolean
+  recError?: string
+  snapshotId?: string
+  recAction?: string
+  isRetirement: boolean
+  onClose: () => void
+  onAction: (snapshotId: string, action: 'followed' | 'ignored') => void
+  onGetRecommendation: (symbol: string) => void
+}) {
+  const [tab, setTab] = useState<'overview' | 'history'>('overview')
+  const cls = posClass(p)
+  const day = dayChange(p)
+
+  const avatarCls = isRetirement
+    ? 'bg-amber-500/10 border border-amber-500/20 text-amber-300 shadow-[0_0_20px_rgba(245,158,11,0.1)]'
+    : cls === 'gain'
+    ? 'bg-emerald-500/10 border border-emerald-400/25 text-emerald-300 shadow-[0_0_20px_rgba(16,185,129,0.12)]'
+    : cls === 'loss'
+    ? 'bg-red-500/10 border border-red-400/20 text-red-300'
+    : 'bg-violet-500/10 border border-violet-500/20 text-violet-300'
+
+  // Close on Escape
+  useEffect(() => {
+    const handler = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose() }
+    document.addEventListener('keydown', handler)
+    return () => document.removeEventListener('keydown', handler)
+  }, [onClose])
+
+  const kvItems = [
+    { key: 'CURRENT VALUE', val: fmt(p.current_value, '$'), color: '' },
+    { key: 'SHARES HELD', val: p.total_shares?.toString() ?? '—', color: '' },
+    { key: 'CURRENT PRICE', val: fmt(p.current_price, '$'), color: '' },
+    { key: 'COST BASIS', val: p.total_cost_basis != null ? fmt(p.total_cost_basis, '$') : null, color: '' },
+    {
+      key: 'TOTAL GAIN',
+      val: p.total_gain_loss != null
+        ? (p.total_gain_loss >= 0 ? '+$' : '−$') + Math.abs(p.total_gain_loss).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+        : null,
+      color: gainColor(p.total_gain_loss),
+    },
+    {
+      key: 'GAIN %',
+      val: p.total_gain_loss_percent != null
+        ? (p.total_gain_loss_percent >= 0 ? '+' : '') + p.total_gain_loss_percent.toFixed(2) + '%'
+        : null,
+      color: gainColor(p.total_gain_loss_percent),
+    },
+    {
+      key: 'TODAY P&L',
+      val: day?.dollar != null
+        ? (day.dollar >= 0 ? '+$' : '−$') + Math.abs(day.dollar).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+        : null,
+      color: day ? gainColor(day.pct) : '',
+    },
+    {
+      key: 'TODAY %',
+      val: day ? (day.pct >= 0 ? '+' : '') + day.pct.toFixed(2) + '%' : null,
+      color: day ? gainColor(day.pct) : '',
+    },
+    {
+      key: 'PORTFOLIO WT.',
+      val: p.percent_of_account != null ? p.percent_of_account.toFixed(1) + '%' : null,
+      color: '',
+    },
+    {
+      key: 'SECTOR',
+      val: p.sector ?? null,
+      color: '',
+    },
+  ]
+
+  return (
+    <div
+      className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-0 sm:p-6"
+      onClick={e => { if (e.target === e.currentTarget) onClose() }}
+    >
+      {/* backdrop */}
+      <div className="absolute inset-0 bg-black/70 backdrop-blur-[4px]" onClick={onClose} />
+
+      {/* modal box */}
+      <div className="relative w-full sm:max-w-[720px] max-h-[82vh] bg-[#0c0c14] border-t sm:border border-white/[0.07] sm:rounded-2xl shadow-[0_-20px_60px_rgba(0,0,0,0.6)] sm:shadow-[0_40px_100px_rgba(0,0,0,0.7)] flex flex-col overflow-hidden">
+
+        {/* drag handle (mobile) */}
+        <div className="sm:hidden w-9 h-1 rounded-full bg-white/10 mx-auto mt-3 mb-1 shrink-0" />
+
+        {/* top accent line */}
+        <div className="h-px mx-6 mt-2 sm:mt-0 bg-gradient-to-r from-transparent via-cyan-500/50 to-transparent shrink-0" />
+
+        {/* tabs */}
+        <div className="flex border-b border-white/[0.05] px-6 shrink-0">
+          {(['overview', 'history'] as const).map(t => (
+            <button
+              key={t}
+              onClick={() => setTab(t)}
+              className={`text-[11px] font-bold uppercase tracking-wider py-3 px-4 border-b-2 -mb-px transition-colors ${
+                tab === t
+                  ? 'text-cyan-300 border-cyan-400'
+                  : 'text-gray-600 border-transparent hover:text-gray-400'
+              }`}
+            >
+              {t}
+            </button>
+          ))}
+          {/* close button */}
+          <button
+            onClick={onClose}
+            className="ml-auto self-center w-7 h-7 rounded-lg bg-white/[0.04] border border-white/[0.06] flex items-center justify-center text-gray-500 hover:text-white hover:bg-white/[0.08] transition"
+          >
+            <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+            </svg>
+          </button>
+        </div>
+
+        {/* overview tab */}
+        {tab === 'overview' && (
+          <div className="flex-1 overflow-y-auto min-h-0">
+            <div className="grid sm:grid-cols-2 divide-y sm:divide-y-0 sm:divide-x divide-white/[0.05]">
+
+              {/* left: position data */}
+              <div className="p-5 sm:p-6 space-y-4">
+                {/* symbol row */}
+                <div className="flex items-start gap-3.5 mb-5">
+                  <div className={`w-12 h-12 rounded-[13px] flex items-center justify-center text-sm font-bold shrink-0 ${avatarCls}`}>
+                    {p.symbol.slice(0, 2)}
+                  </div>
+                  <div>
+                    <div className="text-xl font-bold text-white font-mono tracking-tight">{p.symbol}</div>
+                    <div className="text-[11px] text-gray-500 mt-0.5">{p.description}</div>
+                    {p.account_type && p.account_type !== 'individual' && (
+                      <span className="text-[9px] font-medium px-1.5 py-0.5 rounded bg-amber-500/10 text-amber-400 border border-amber-500/20 mt-1 inline-block">
+                        {ACCOUNT_TYPE_LABEL[p.account_type] ?? p.account_type}
+                      </span>
+                    )}
+                  </div>
+                </div>
+
+                {/* KV grid */}
+                <div className="grid grid-cols-2 gap-[2px]">
+                  {kvItems.filter(k => k.val !== null).map(k => (
+                    <div key={k.key} className="bg-white/[0.02] border border-white/[0.04] rounded-md p-2.5 flex flex-col gap-1">
+                      <span className="text-[9px] font-bold uppercase tracking-wider text-gray-600 font-mono">{k.key}</span>
+                      <span className={`text-[14px] font-bold font-mono ${k.color || 'text-gray-200'}`}>{k.val}</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              {/* right: sage analysis */}
+              <div className="p-5 sm:p-6">
+                <div className="text-[9px] font-bold uppercase tracking-wider text-cyan-500/70 font-mono mb-4">
+                  ⚡ Sage Analysis
+                </div>
+
+                {loadingRec ? (
+                  <div className="flex justify-center py-10 text-gray-600"><Spinner /></div>
+                ) : rec ? (
+                  <div className="space-y-4">
+                    <div className="flex items-center gap-3">
+                      <span className={`text-[13px] font-bold uppercase tracking-wider px-3 py-1.5 rounded-md border font-mono ${
+                        REC_COLORS[rec.recommendation] ?? 'bg-gray-500/15 text-gray-400 border-gray-500/30'
+                      }`}>
+                        {REC_LABEL[rec.recommendation] ?? rec.recommendation}
+                      </span>
+                      {rec.confidence && (
+                        <div>
+                          <div className="text-lg font-bold text-violet-300 font-mono">{rec.confidence[0]}</div>
+                          <div className="text-[9px] uppercase tracking-wider text-gray-600 font-mono">Confidence</div>
+                        </div>
+                      )}
+                    </div>
+
+                    {rec.reasoning && (
+                      <p className="text-[12px] text-gray-400 leading-relaxed border-l-2 border-cyan-500/30 pl-3">
+                        {rec.reasoning}
+                      </p>
+                    )}
+
+                    {rec.key_factors?.length > 0 && (
+                      <div>
+                        <div className="text-[9px] font-bold uppercase tracking-wider text-cyan-500/40 font-mono mb-2">Key Factors</div>
+                        <div className="space-y-1.5">
+                          {rec.key_factors.map((f: string, i: number) => (
+                            <div key={i} className="flex gap-2 text-[11px] text-gray-500 leading-relaxed">
+                              <span className="text-cyan-600/50 shrink-0 font-mono">›</span>
+                              <span>{f}</span>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+
+                    {rec.recommendation === 'SELL' && rec.opportunity_cost && (
+                      <div className="bg-emerald-500/[0.04] border border-emerald-500/[0.12] rounded-xl p-3">
+                        <p className="text-[9px] font-bold uppercase tracking-wider text-emerald-700 mb-2 font-mono">Opportunity Cost</p>
+                        <p className="text-xs text-gray-500 mb-1">
+                          Capital freed: <span className="text-white font-medium">${rec.opportunity_cost.freed_capital.toLocaleString('en-US', { maximumFractionDigits: 0 })}</span>
+                        </p>
+                        {rec.opportunity_cost.best_position && (
+                          <p className="text-xs text-gray-500">
+                            Best performer: <span className="text-emerald-400 font-medium">{rec.opportunity_cost.best_position.symbol}</span>{' '}
+                            <span className="text-emerald-400">+{rec.opportunity_cost.best_position.return_pct}%</span>
+                          </p>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                ) : recError ? (
+                  <div className="text-center py-8">
+                    <p className="text-xs text-red-400 mb-3">{recError}</p>
+                    <button
+                      onClick={() => onGetRecommendation(p.symbol)}
+                      className="text-xs border border-red-500/20 text-red-400 hover:text-red-300 px-3 py-1.5 rounded-lg transition"
+                    >Retry</button>
+                  </div>
+                ) : (
+                  <div className="flex flex-col items-start gap-3 py-4">
+                    <p className="text-xs text-gray-600">Sage hasn't analyzed {p.symbol} yet.</p>
+                    <button
+                      onClick={() => onGetRecommendation(p.symbol)}
+                      className="inline-flex items-center gap-1.5 text-xs text-gray-400 hover:text-violet-400 border border-white/[0.08] hover:border-violet-500/30 px-3 py-1.5 rounded-lg transition"
+                    >
+                      <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                        <path strokeLinecap="round" strokeLinejoin="round" d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z" />
+                      </svg>
+                      Ask Sage
+                    </button>
+                  </div>
+                )}
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* history tab */}
+        {tab === 'history' && (
+          <div className="flex-1 overflow-y-auto min-h-0 p-6">
+            <div className="text-[9px] font-bold uppercase tracking-wider text-cyan-500/40 font-mono mb-4">
+              Transaction History · {p.symbol}
+            </div>
+            <div className="flex flex-col items-center justify-center py-12 text-center">
+              <div className="w-10 h-10 rounded-xl bg-white/[0.04] border border-white/[0.06] flex items-center justify-center mb-3">
+                <svg className="w-5 h-5 text-gray-600" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                </svg>
+              </div>
+              <p className="text-sm text-gray-500 font-medium">Transaction history coming soon</p>
+              <p className="text-xs text-gray-700 mt-1">Import a transactions CSV to see your trade history here</p>
+            </div>
+          </div>
+        )}
+
+        {/* footer */}
+        <div className="shrink-0 flex gap-2.5 px-6 py-4 border-t border-white/[0.05]">
+          <ActionButtons snapshotId={snapshotId ?? null} currentAction={recAction} onAction={onAction} />
+          <button
+            onClick={onClose}
+            className="ml-auto text-xs font-semibold uppercase tracking-wider px-4 py-2.5 rounded-lg bg-cyan-500/[0.06] border border-cyan-500/20 text-cyan-500/70 hover:bg-cyan-500/10 transition font-mono"
+          >
+            Close ×
+          </button>
+        </div>
+      </div>
+    </div>
   )
 }
 
@@ -538,80 +864,138 @@ interface SectionProps {
   recommendations: Record<string, any>
   loadingRec: Record<string, boolean>
   recErrors: Record<string, string>
-  snapshotIds: Record<string, string>
-  recActions: Record<string, string>
   selectedSymbol: string | null
   onRowClick: (symbol: string) => void
   onGetRecommendation: (symbol: string) => void
-  onAction?: (symbol: string, snapshotId: string, action: 'followed' | 'ignored') => void
   readOnly?: boolean
   headerRight?: React.ReactNode
   isRetirement: boolean
-  isMobile: boolean
+  viewMode: ViewMode
+  sortField: SortField
+  sortDir: SortDir
+  onSort: (f: SortField) => void
+  filterSector: string | null
+  onFilterSector: (s: string | null) => void
+  filterRec: string | null
+  onFilterRec: (r: string | null) => void
 }
 
 function PositionsSection({
   title, subtitle, accentClass, positions, recommendations, loadingRec, recErrors,
-  snapshotIds, recActions, selectedSymbol, onRowClick, onGetRecommendation, onAction,
-  readOnly, headerRight, isRetirement, isMobile,
+  selectedSymbol, onRowClick, onGetRecommendation,
+  readOnly, headerRight, isRetirement, viewMode, sortField, sortDir, onSort,
+  filterSector, onFilterSector, filterRec, onFilterRec,
 }: SectionProps) {
-  const colSpan = readOnly ? 9 : 10
+
+  const sectors = Array.from(new Set(positions.map(p => p.sector).filter(Boolean) as string[])).sort()
+
+  // filter
+  let filtered = positions.filter(p => {
+    if (filterSector && p.sector !== filterSector) return false
+    if (filterRec) {
+      const rec = recommendations[p.symbol]
+      if (!rec || rec.recommendation !== filterRec) return false
+    }
+    return true
+  })
+
+  // sort
+  filtered = [...filtered].sort((a, b) => {
+    let va = 0, vb = 0
+    if (sortField === 'symbol') {
+      return sortDir === 'asc'
+        ? a.symbol.localeCompare(b.symbol)
+        : b.symbol.localeCompare(a.symbol)
+    }
+    if (sortField === 'value') { va = a.current_value ?? 0; vb = b.current_value ?? 0 }
+    if (sortField === 'gain_pct') { va = a.total_gain_loss_percent ?? -Infinity; vb = b.total_gain_loss_percent ?? -Infinity }
+    if (sortField === 'day_pct') {
+      const da = dayChange(a); const db = dayChange(b)
+      va = da?.pct ?? -Infinity; vb = db?.pct ?? -Infinity
+    }
+    if (sortField === 'weight') { va = a.percent_of_account ?? 0; vb = b.percent_of_account ?? 0 }
+    return sortDir === 'asc' ? va - vb : vb - va
+  })
+
   return (
     <div>
+      {/* section header */}
       <div className="px-6 py-4 border-b border-white/[0.06] flex items-center justify-between">
         <div>
           <div className="flex items-center gap-2">
             <span className={`w-1.5 h-1.5 rounded-full ${accentClass}`} />
             <h3 className="font-semibold text-sm">{title}</h3>
             <span className="text-xs text-gray-600">{positions.length} position{positions.length !== 1 ? 's' : ''}</span>
+            {filtered.length !== positions.length && (
+              <span className="text-xs text-cyan-500/60">({filtered.length} shown)</span>
+            )}
           </div>
           <p className="text-xs text-gray-600 mt-0.5 ml-3.5">{subtitle}</p>
         </div>
         {headerRight}
       </div>
 
-      <div className="overflow-x-auto">
-        <table className="w-full min-w-[700px] text-sm">
-          <thead>
-            <tr className="border-b border-white/[0.04]">
-              {['Symbol', 'Sector', 'Shares', 'Price', 'Value', 'Cost Basis', 'Gain / Loss', '%', 'Day', ...(readOnly ? [] : ['Sage'])].map((h, i) => (
-                <th key={h} className={`px-5 py-3 text-xs font-medium text-gray-600 uppercase tracking-wider ${i < 2 ? 'text-left' : 'text-right'}`}>{h}</th>
-              ))}
-            </tr>
-          </thead>
-          <tbody className="divide-y divide-white/[0.04]">
-            {positions.map((p) => (
-              <Fragment key={p.symbol}>
+      {/* sort/filter bar */}
+      <SortFilterBar
+        sortField={sortField} sortDir={sortDir} onSort={onSort}
+        filterSector={filterSector} onFilterSector={onFilterSector}
+        filterRec={filterRec} onFilterRec={onFilterRec}
+        sectors={sectors}
+      />
+
+      {filtered.length === 0 ? (
+        <div className="px-6 py-10 text-center text-sm text-gray-600">No positions match the current filters.</div>
+      ) : viewMode === 'tile' ? (
+        /* ── Tile grid ── */
+        <div className="p-5 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3.5">
+          {filtered.map(p => (
+            <PositionCard
+              key={p.symbol}
+              p={p}
+              rec={recommendations[p.symbol]}
+              loadingRec={!!loadingRec[p.symbol]}
+              recError={recErrors[p.symbol]}
+              isRetirement={isRetirement}
+              onClick={() => onRowClick(p.symbol)}
+              onAskSage={e => { e.stopPropagation(); onRowClick(p.symbol); onGetRecommendation(p.symbol) }}
+            />
+          ))}
+        </div>
+      ) : (
+        /* ── List table ── */
+        <div className="overflow-x-auto">
+          <table className="w-full min-w-[800px] text-sm">
+            <thead>
+              <tr className="border-b border-white/[0.04] bg-white/[0.015]">
+                <th className="w-1 p-0" />
+                {['Symbol', 'Sector', 'Shares', 'Price', 'Value', 'Cost', 'P&L ($)', 'P&L (%)', 'Day', ...(readOnly ? [] : ['Sage'])].map((h, i) => (
+                  <th
+                    key={h}
+                    className={`px-4 py-2.5 text-[9px] font-bold text-gray-600 uppercase tracking-wider font-mono ${i < 2 ? 'text-left' : 'text-right'}`}
+                  >
+                    {h}
+                  </th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {filtered.map(p => (
                 <PositionRow
+                  key={p.symbol}
                   p={p}
-                  recommendations={recommendations}
-                  loadingRec={loadingRec}
-                  recErrors={recErrors}
+                  rec={recommendations[p.symbol]}
+                  loadingRec={!!loadingRec[p.symbol]}
+                  recError={recErrors[p.symbol]}
                   isSelected={selectedSymbol === p.symbol}
-                  onRowClick={onRowClick}
-                  onGetRecommendation={onGetRecommendation}
-                  readOnly={readOnly}
                   isRetirement={isRetirement}
+                  onRowClick={() => onRowClick(p.symbol)}
+                  onAskSage={e => { e.stopPropagation(); onRowClick(p.symbol); onGetRecommendation(p.symbol) }}
                 />
-                {isMobile && selectedSymbol === p.symbol && (
-                  <InlineExpandRow
-                    colSpan={colSpan}
-                    symbol={p.symbol}
-                    recommendation={recommendations[p.symbol]}
-                    loading={!!loadingRec[p.symbol]}
-                    error={recErrors[p.symbol]}
-                    snapshotId={snapshotIds[p.symbol]}
-                    recAction={recActions[p.symbol]}
-                    onAction={(sid, action) => onAction?.(p.symbol, sid, action)}
-                    onGetRecommendation={onGetRecommendation}
-                    isRetirement={isRetirement}
-                  />
-                )}
-              </Fragment>
-            ))}
-          </tbody>
-        </table>
-      </div>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
     </div>
   )
 }
@@ -631,25 +1015,19 @@ interface Props {
   readOnly?: boolean
 }
 
-function useIsMobile(breakpoint = 768) {
-  const [isMobile, setIsMobile] = useState(false)
-  useEffect(() => {
-    const check = () => setIsMobile(window.innerWidth < breakpoint)
-    check()
-    window.addEventListener('resize', check)
-    return () => window.removeEventListener('resize', check)
-  }, [breakpoint])
-  return isMobile
-}
 
 export default function PositionsTable({
   positions, loadingRec, recommendations, recErrors,
   snapshotIds = {}, recActions = {}, onGetRecommendation, onAction, onImportClick, readOnly,
 }: Props) {
+  const [viewMode, setViewMode] = useState<ViewMode>('tile')
+  const [sortField, setSortField] = useState<SortField>('value')
+  const [sortDir, setSortDir] = useState<SortDir>('desc')
+  const [filterSector, setFilterSector] = useState<string | null>(null)
+  const [filterRec, setFilterRec] = useState<string | null>(null)
+  const [selectedSymbol, setSelectedSymbol] = useState<string | null>(null)
   const [loadingAllPersonal, setLoadingAllPersonal] = useState(false)
   const [loadingAllRetirement, setLoadingAllRetirement] = useState(false)
-  const [selectedSymbol, setSelectedSymbol] = useState<string | null>(null)
-  const isMobile = useIsMobile()
 
   const personalPositions = positions.filter(p => !RETIREMENT_TYPES.has(p.account_type ?? 'individual'))
   const retirementPositions = positions.filter(p => RETIREMENT_TYPES.has(p.account_type ?? 'individual'))
@@ -661,11 +1039,18 @@ export default function PositionsTable({
   const isSelectedRetirement = selectedPosition
     ? RETIREMENT_TYPES.has(selectedPosition.account_type ?? 'individual')
     : false
-  // Drawer is only shown on desktop
-  const drawerOpen = !isMobile && selectedSymbol !== null && selectedPosition !== null
 
   function handleRowClick(symbol: string) {
     setSelectedSymbol(prev => prev === symbol ? null : symbol)
+  }
+
+  function handleSort(f: SortField) {
+    if (sortField === f) {
+      setSortDir(d => d === 'asc' ? 'desc' : 'asc')
+    } else {
+      setSortField(f)
+      setSortDir('desc')
+    }
   }
 
   if (positions.length === 0) {
@@ -728,23 +1113,26 @@ export default function PositionsTable({
     )
   }
 
-  // Shared section props
   const sharedSectionProps = {
-    recommendations, loadingRec, recErrors, snapshotIds, recActions,
-    selectedSymbol, onRowClick: handleRowClick, onGetRecommendation, onAction,
-    readOnly, isMobile,
+    recommendations, loadingRec, recErrors,
+    selectedSymbol, onRowClick: handleRowClick, onGetRecommendation, readOnly,
+    viewMode, sortField, sortDir, onSort: handleSort,
+    filterSector, onFilterSector: setFilterSector,
+    filterRec, onFilterRec: setFilterRec,
   }
 
-  // The section cards (always full-width)
   const sectionCards = !hasBoth ? (
     <div className="bg-white/[0.03] border border-white/[0.08] rounded-2xl overflow-hidden">
-      <div className="px-6 py-5 border-b border-white/[0.06] flex items-center justify-between">
+      <div className="px-6 py-4 border-b border-white/[0.06] flex items-center justify-between">
         <h2 className="font-semibold">Positions</h2>
-        <AskAllButton
-          group={positions}
-          loading={hasRetirement ? loadingAllRetirement : loadingAllPersonal}
-          setLoading={hasRetirement ? setLoadingAllRetirement : setLoadingAllPersonal}
-        />
+        <div className="flex items-center gap-3">
+          <ViewToggle view={viewMode} onChange={setViewMode} />
+          <AskAllButton
+            group={positions}
+            loading={hasRetirement ? loadingAllRetirement : loadingAllPersonal}
+            setLoading={hasRetirement ? setLoadingAllRetirement : setLoadingAllPersonal}
+          />
+        </div>
       </div>
       <PositionsSection
         {...sharedSectionProps}
@@ -767,7 +1155,12 @@ export default function PositionsTable({
           accentClass="bg-violet-400"
           positions={personalPositions}
           isRetirement={false}
-          headerRight={<AskAllButton group={personalPositions} loading={loadingAllPersonal} setLoading={setLoadingAllPersonal} />}
+          headerRight={
+            <div className="flex items-center gap-3">
+              <ViewToggle view={viewMode} onChange={setViewMode} />
+              <AskAllButton group={personalPositions} loading={loadingAllPersonal} setLoading={setLoadingAllPersonal} />
+            </div>
+          }
         />
       </div>
       <div className="bg-white/[0.03] border border-amber-500/[0.08] rounded-2xl overflow-hidden">
@@ -778,7 +1171,12 @@ export default function PositionsTable({
           accentClass="bg-amber-400"
           positions={retirementPositions}
           isRetirement={true}
-          headerRight={<AskAllButton group={retirementPositions} loading={loadingAllRetirement} setLoading={setLoadingAllRetirement} />}
+          headerRight={
+            <div className="flex items-center gap-3">
+              <ViewToggle view={viewMode} onChange={setViewMode} />
+              <AskAllButton group={retirementPositions} loading={loadingAllRetirement} setLoading={setLoadingAllRetirement} />
+            </div>
+          }
         />
         <div className="px-6 py-3 border-t border-white/[0.04] flex items-center gap-2 bg-amber-500/[0.03]">
           <svg className="w-3.5 h-3.5 text-amber-500/60 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
@@ -792,46 +1190,25 @@ export default function PositionsTable({
     </div>
   )
 
-  // Mobile: just the cards (inline expand handled inside PositionsSection)
-  if (isMobile) {
-    return sectionCards
-  }
-
-  // Desktop: full-width table + fixed overlay drawer
   return (
     <>
       {sectionCards}
 
-      {/* Backdrop — click to close */}
-      <div
-        className={`fixed inset-0 z-40 bg-black/40 backdrop-blur-[2px] transition-opacity duration-300 ${
-          drawerOpen ? 'opacity-100 pointer-events-auto' : 'opacity-0 pointer-events-none'
-        }`}
-        onClick={() => setSelectedSymbol(null)}
-      />
-
-      {/* Fixed slide-in panel */}
-      <div
-        className={`fixed inset-y-0 right-0 z-50 w-[420px] bg-[#0d0d14] border-l border-white/[0.08] shadow-2xl shadow-black/60 transition-transform duration-300 ease-[cubic-bezier(.4,0,.2,1)] ${
-          drawerOpen ? 'translate-x-0' : 'translate-x-full'
-        }`}
-      >
-        {drawerOpen && selectedPosition && (
-          <DrawerPanel
-            symbol={selectedSymbol!}
-            position={selectedPosition}
-            recommendation={recommendations[selectedSymbol!]}
-            loading={!!loadingRec[selectedSymbol!]}
-            error={recErrors[selectedSymbol!]}
-            snapshotId={snapshotIds[selectedSymbol!]}
-            recAction={recActions[selectedSymbol!]}
-            onAction={(sid, action) => onAction?.(selectedSymbol!, sid, action)}
-            onGetRecommendation={onGetRecommendation}
-            onClose={() => setSelectedSymbol(null)}
-            isRetirement={isSelectedRetirement}
-          />
-        )}
-      </div>
+      {/* Detail modal */}
+      {selectedSymbol && selectedPosition && (
+        <DetailModal
+          p={selectedPosition}
+          rec={recommendations[selectedSymbol]}
+          loadingRec={!!loadingRec[selectedSymbol]}
+          recError={recErrors[selectedSymbol]}
+          snapshotId={snapshotIds[selectedSymbol]}
+          recAction={recActions[selectedSymbol]}
+          isRetirement={isSelectedRetirement}
+          onClose={() => setSelectedSymbol(null)}
+          onAction={(sid, action) => onAction?.(selectedSymbol, sid, action)}
+          onGetRecommendation={onGetRecommendation}
+        />
+      )}
     </>
   )
 }
