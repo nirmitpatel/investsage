@@ -55,16 +55,13 @@ async def fetch_congress_trades(days_back: int = 90) -> List[Dict[str, Any]]:
         log.warning("mcp package not installed; congress trades unavailable")
         return []
 
-    from mcp import StdioServerParameters
-    from mcp.client.stdio import stdio_client
-
     cutoff = (date.today() - timedelta(days=days_back)).isoformat()
     trades: List[Dict[str, Any]] = []
 
     try:
         server_params = StdioServerParameters(
-            command="mcp-capitol-trades",
-            args=[],
+            command="npx",
+            args=["@anguslin/mcp-capitol-trades"],
             env=None,
         )
         async with stdio_client(server_params) as (read, write):
